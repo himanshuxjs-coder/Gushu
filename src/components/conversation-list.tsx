@@ -190,7 +190,7 @@ export const ConversationList = memo(function ConversationList({
                       <div className="mb-0.5 flex items-center justify-between">
                         <div className="flex items-center gap-1.5 truncate">
                           <span className="truncate text-sm font-medium text-foreground">
-                            {c.hidden && c.hasSecretCode ? "User xyz" : (o?.display_name ?? o?.username)}
+                            {c.hidden && c.hasSecretCode ? "Unknown User" : (o?.display_name ?? o?.username)}
                           </span>
                           {! (c.hidden && c.hasSecretCode) && o?.verified && <VerifiedBadge size={12} />}
                           {c.hidden && <EyeOff className="size-3 text-muted-foreground" />}
