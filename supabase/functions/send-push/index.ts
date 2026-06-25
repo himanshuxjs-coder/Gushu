@@ -102,46 +102,58 @@ async function getAccessToken() {
 
 Deno.serve(async (req: Request) => {
   try {
-    const { token, title, body } = await req.json();
+    const payload = await req.json();
+    const { title, body, data } = payload;
 
-    const { accessToken, projectId } =
-      await getAccessToken();
+    // Handle both 'token' (string) and 'tokens' (array of strings)
+    const tokens = payload.tokens || (payload.token ? [payload.token] : []);
 
-    const response = await fetch(
-      `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: {
-            token,
-            notification: {
-              title,
-              body,
-            },
-            android: {
-              priority: "high",
+    if (tokens.length === 0) {
+      return Response.json({ success: false, error: "No tokens provided" });
+    }
+
+    const { accessToken, projectId } = await getAccessToken();
+    const results = [];
+
+    // FCM v1 sends to one token at a time
+    for (const token of tokens) {
+      const response = await fetch(
+        `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: {
+              token,
               notification: {
-                channel_id: "gushu-channel",
-                notification_priority: "PRIORITY_MAX",
-                sound: "default",
-                icon: "ic_stat_ic_notification",
-                color: "#8B5CF6",
+                title,
+                body,
+              },
+              data: data || {},
+              android: {
+                priority: "HIGH",
+                notification: {
+                  channel_id: "gushu-priority-v1",
+                  notification_priority: "PRIORITY_MAX",
+                  sound: "default",
+                  icon: "ic_stat_ic_notification",
+                  color: "#8B5CF6",
+                  visibility: "PUBLIC",
+                },
               },
             },
-          },
-        }),
-      }
-    );
-
-    const result = await response.json();
+          }),
+        }
+      );
+      results.push(await response.json());
+    }
 
     return Response.json({
-      success: response.ok,
-      result,
+      success: true,
+      results,
     });
   } catch (error) {
     return Response.json({

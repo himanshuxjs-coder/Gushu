@@ -142,7 +142,7 @@ public class MainActivity extends BridgeActivity {
         
         lastReloadTime = currentTime;
         isPageLoaded = false;
-        
+
         runOnUiThread(() -> {
             android.util.Log.d("Gushu", "Restarting Activity...");
             // recreate() is a native Android way to destroy and restart the current activity

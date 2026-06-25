@@ -195,10 +195,10 @@ async function registerPushNotifications(userId: string) {
   // Create a default notification channel for Android
   if (Capacitor.getPlatform() === 'android') {
     await PushNotifications.createChannel({
-      id: 'default',
-      name: 'Default',
-      description: 'Default notification channel',
-      importance: 5, // High/Max importance
+      id: 'gushu-priority-v1',
+      name: 'Gushu High Priority',
+      description: 'Important notifications that show over other apps',
+      importance: 5, // Max importance for heads-up
       visibility: 1, // Public
       sound: 'default',
       vibration: true,
