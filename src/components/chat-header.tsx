@@ -27,8 +27,6 @@ import { PinDialog } from "@/components/pin-dialog";
 import { PremiumDropdownMenu, PremiumMenuItem, PremiumMenuSeparator } from "@/components/premium-dropdown-menu";
 import { leaveConversation } from "@/lib/conversations.functions";
 import { toggleConversationHidden, clearConversation, removeFromInbox } from "@/lib/conversation-settings.functions";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { verifyConversationPin } from "@/lib/conversation-settings.functions";
 import { getTypingStatus } from "@/lib/presence.functions";
 import { isOnline, formatRelative } from "@/lib/format";
@@ -54,6 +52,7 @@ type Settings = {
   notification_enabled?: boolean;
   secret_code_hash?: string | null;
   cleared_at?: string | null;
+  cleared_through_seq?: number | null;
 };
 
 interface ChatHeaderProps {
@@ -67,7 +66,6 @@ interface ChatHeaderProps {
   isHiddenLocked?: boolean;
   loading?: boolean;
   isCollapsed?: boolean;
-  hasSavedByMe?: boolean;
 }
 
 export function ChatHeader({
@@ -81,7 +79,6 @@ export function ChatHeader({
   isHiddenLocked,
   loading,
   isCollapsed,
-  hasSavedByMe,
 }: ChatHeaderProps) {
   const leave = useServerFn(leaveConversation);
   const hideFn = useServerFn(toggleConversationHidden);
@@ -101,7 +98,6 @@ export function ChatHeader({
   const verifyPin = useServerFn(verifyConversationPin);
   const [profileOpen, setProfileOpen] = useState(false);
   const [fullProfile, setFullProfile] = useState<any>(null);
-  const [alsoClearSaved, setAlsoClearSaved] = useState(false);
 
   const openProfile = useCallback(async () => {
     if (!other) return;
@@ -132,13 +128,13 @@ export function ChatHeader({
   }, [conversationId, getTyping]);
 
   async function handleClearChat() {
-    console.log("[handleClearChat] entered", { conversationId, clearSaved: alsoClearSaved });
+    console.log("[handleClearChat] entered", { conversationId });
     setBusy(true);
     try {
-      console.log("[handleClearChat] mutation started", { conversationId, clearSaved: alsoClearSaved });
-      const result = await clearFn({ data: { conversationId, clearSaved: alsoClearSaved } });
-      console.log("[handleClearChat] mutation finished", { conversationId, clearSaved: alsoClearSaved, result });
-      toast.success(alsoClearSaved ? "All messages cleared" : "Chat history cleared (saved kept)");
+      console.log("[handleClearChat] mutation started", { conversationId });
+      const result = await clearFn({ data: { conversationId } });
+      console.log("[handleClearChat] mutation finished", { conversationId, result });
+      toast.success("Chat history cleared");
       queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
       queryClient.invalidateQueries({ queryKey: ["conv-settings", conversationId] });
       onSettingsChange({ cleared_at: new Date().toISOString() });
@@ -319,25 +315,6 @@ export function ChatHeader({
                 <AlertDialogDescription className="text-muted-foreground">
                   This will clear all messages and media in this conversation for YOU. The other person will still see the history. This action cannot be undone.
                 </AlertDialogDescription>
-                
-                <div className="flex items-center space-x-2 py-4">
-                  <Checkbox 
-                    id="clearSaved" 
-                    checked={alsoClearSaved} 
-                    onCheckedChange={(v) => setAlsoClearSaved(!!v)}
-                    disabled={!hasSavedByMe}
-                    className="border-primary"
-                  />
-                  <Label 
-                    htmlFor="clearSaved"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-foreground cursor-pointer"
-                  >
-                    Also clear saved chats
-                  </Label>
-                  {!hasSavedByMe && (
-                    <span className="text-xs text-muted-foreground">Only enabled when you have saved chats.</span>
-                  )}
-                </div>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel className="border-border bg-muted text-muted-foreground hover:bg-muted/80">Cancel</AlertDialogCancel>

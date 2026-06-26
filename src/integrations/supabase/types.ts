@@ -42,6 +42,7 @@ export type Database = {
           created_at: string;
           id: string;
           last_message_at: string;
+          expiry_seconds: number | null;
           user1_id: string;
           user2_id: string;
         };
@@ -49,6 +50,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           last_message_at?: string;
+          expiry_seconds?: number | null;
           user1_id: string;
           user2_id: string;
         };
@@ -56,6 +58,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           last_message_at?: string;
+          expiry_seconds?: number | null;
           user1_id?: string;
           user2_id?: string;
         };
@@ -72,6 +75,8 @@ export type Database = {
           theme: string;
           wallpaper_url: string | null;
           cleared_at: string | null;
+          cleared_through_seq: number;
+          clear_delete_through_seq: number;
           notification_enabled: boolean;
           secret_code_hash: string | null;
           disappear_after_view_enabled: boolean;
@@ -88,6 +93,8 @@ export type Database = {
           theme?: string;
           wallpaper_url?: string | null;
           cleared_at?: string | null;
+          cleared_through_seq?: number;
+          clear_delete_through_seq?: number;
           notification_enabled?: boolean;
           secret_code_hash?: string | null;
           disappear_after_view_enabled?: boolean;
@@ -104,6 +111,8 @@ export type Database = {
           theme?: string;
           wallpaper_url?: string | null;
           cleared_at?: string | null;
+          cleared_through_seq?: number;
+          clear_delete_through_seq?: number;
           notification_enabled?: boolean;
           secret_code_hash?: string | null;
           disappear_after_view_enabled?: boolean;
@@ -216,6 +225,7 @@ export type Database = {
           content: string | null;
           conversation_id: string;
           created_at: string;
+          clear_seq: number;
           edited: boolean;
           id: string;
           media_mime: string | null;
@@ -241,6 +251,7 @@ export type Database = {
           content?: string | null;
           conversation_id: string;
           created_at?: string;
+          clear_seq?: number;
           edited?: boolean;
           id?: string;
           media_mime?: string | null;
@@ -266,6 +277,7 @@ export type Database = {
           content?: string | null;
           conversation_id?: string;
           created_at?: string;
+          clear_seq?: number;
           edited?: boolean;
           id?: string;
           media_mime?: string | null;
@@ -382,10 +394,11 @@ export type Database = {
       };
       leave_conversation: { Args: { _conv: string }; Returns: boolean };
       purge_conversation: { Args: { _conv: string }; Returns: undefined };
+      clear_conversation_for_me: { Args: { _conv: string }; Returns: Json };
     };
     Enums: {
       app_role: "admin" | "user";
-      message_kind: "text" | "image" | "video" | "file" | "audio";
+      message_kind: "text" | "image" | "video" | "file" | "audio" | "system";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -512,7 +525,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
-      message_kind: ["text", "image", "video", "file", "audio"],
+      message_kind: ["text", "image", "video", "file", "audio", "system"],
     },
   },
 } as const;

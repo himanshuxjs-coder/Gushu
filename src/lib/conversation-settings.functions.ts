@@ -145,243 +145,27 @@ export const clearConversation = createServerFn({ method: "POST" })
   }).parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    console.log("[clearConversation] entered", { userId, conversationId: data.conversationId, clearSaved: data.clearSaved });
-    
-    let updatedRows = 0;
-    let deletedRows = 0;
-    let clearError: string | null = null;
-    const debug: Record<string, any> = {
-      conversationId: data.conversationId,
+    console.log("[clearConversation] entered", {
       userId,
-      clearedAt: null,
-      participantCount: 0,
-      earliestClearedAt: null,
-      latestClearedAt: null,
-      savedMessageCount: 0,
-      messagesBeforeDelete: null,
-      deleteQueryFilters: null,
-      deletedRows: 0,
-      messagesAfterDelete: null,
-      cleanupExecuted: false,
-      error: null,
-    };
+      conversationId: data.conversationId,
+      ignoredClearSaved: data.clearSaved,
+    });
 
-    // 1. Set cleared_at
-    const clearedAt = new Date().toISOString();
-    debug.clearedAt = clearedAt;
-    const { data: upsertedRows, error } = await supabase
-      .from("conversation_settings")
-      .upsert(
-        {
-          conversation_id: data.conversationId,
-          user_id: userId,
-          cleared_at: clearedAt,
-        },
-        { onConflict: "conversation_id,user_id" },
-      )
-      .select();
+    const { data: result, error } = await (supabase as any).rpc("clear_conversation_for_me", {
+      _conv: data.conversationId,
+    });
 
     if (error) {
-      clearError = error.message;
-      console.error("[clearConversation] upsert error", { error });
+      console.error("[clearConversation] clear_conversation_for_me error", { error });
       throw new Error(error.message);
     }
 
-    updatedRows = Array.isArray(upsertedRows) ? upsertedRows.length : 0;
-
-    if (data.clearSaved) {
-      const { data: mySavedRows, error: mySavedError } = await supabase
-        .from("message_saves" as any)
-        .select("message_id")
-        .eq("conversation_id", data.conversationId)
-        .eq("user_id", userId)
-        .limit(1);
-      if (mySavedError) {
-        clearError = mySavedError.message;
-        console.error("[clearConversation] fetch my saved messages error", { error: mySavedError });
-        throw new Error(mySavedError.message);
-      }
-      if (!Array.isArray(mySavedRows) || mySavedRows.length === 0) {
-        throw new Error("You can only clear saved chats if you have saved messages in this conversation.");
-      }
-    }
-
-    // Message visibility is now driven by per-user cleared_at points.
-    // Do not insert delete-for-me rows for a full chat clear, because clear chat is user-specific and new messages after the clear must remain visible.
-
-    // 3. If every active participant has cleared the conversation, delete any unsaved messages older than or equal to the earliest cleared timestamp.
-    const { data: participantRows, error: participantsError } = await supabase
-      .from("conversation_status")
-      .select("user_id")
-      .eq("conversation_id", data.conversationId)
-      .eq("has_left", false);
-    if (participantsError) {
-      clearError = participantsError.message;
-      debug.error = clearError;
-      console.error("[clearConversation] fetch participants error", { error: participantsError });
-      throw new Error(participantsError.message);
-    }
-
-    const participantIds = Array.isArray(participantRows)
-      ? participantRows.map((row: any) => row.user_id).filter(Boolean)
-      : [];
-    debug.participantCount = participantIds.length;
-
-    if (participantIds.length > 0) {
-      const { data: settingsRows, error: settingsError } = await supabase
-        .from("conversation_settings")
-        .select("user_id, cleared_at")
-        .eq("conversation_id", data.conversationId)
-        .in("user_id", participantIds);
-      if (settingsError) {
-        clearError = settingsError.message;
-        debug.error = clearError;
-        console.error("[clearConversation] fetch settings error", { error: settingsError });
-        throw new Error(settingsError.message);
-      }
-
-      const settingsList: any[] = Array.isArray(settingsRows) ? settingsRows : [];
-      const clearedSettings = settingsList.filter((row: any) => row.cleared_at);
-
-      if (clearedSettings.length === participantIds.length) {
-        const minClearedAt = clearedSettings
-          .map((row: any) => row.cleared_at)
-          .sort()[0];
-
-        debug.earliestClearedAt = minClearedAt;
-        debug.latestClearedAt = clearedSettings
-          .map((row: any) => row.cleared_at)
-          .sort()[clearedSettings.length - 1];
-
-        console.log("[clearConversation] ALL PARTICIPANTS CLEARED", {
-          participantIds,
-          minClearedAt,
-          conversationId: data.conversationId,
-        });
-
-        const { data: deletedCount, error: cleanupError } = await supabase
-          .from("messages")
-          .delete()
-          .lte("created_at", minClearedAt)
-          .eq("conversation_id", data.conversationId)
-          .not("id", "in", "(SELECT message_id FROM message_saves)")
-          .select("id");
-
-        if (cleanupError) {
-          clearError = cleanupError.message;
-          debug.error = clearError;
-          console.error("[clearConversation] cleanup delete error", { error: cleanupError });
-          throw new Error(cleanupError.message);
-        }
-
-        const deletedMessages = Array.isArray(deletedCount) ? deletedCount.length : 0;
-        debug.cleanupExecuted = true;
-        debug.deletedRows = deletedMessages;
-        deletedRows += deletedMessages;
-
-        console.log("[clearConversation] cleanup completed", {
-          conversationId: data.conversationId,
-          deletedMessages,
-        });
-      }
-    }
-
-    // If every active participant has cleared the conversation, purge the conversation entirely.
-    if (debug.cleanupExecuted === false && participantIds.length > 0) {
-      const { data: settingsRows, error: settingsError } = await supabase
-        .from("conversation_settings")
-        .select("user_id, cleared_at")
-        .eq("conversation_id", data.conversationId)
-        .in("user_id", participantIds);
-      if (settingsError) {
-        clearError = settingsError.message;
-        debug.error = clearError;
-        console.error("[clearConversation] fetch settings error", { error: settingsError });
-        throw new Error(settingsError.message);
-      }
-
-      const settingsList: any[] = Array.isArray(settingsRows) ? settingsRows : [];
-      const clearedSettings = settingsList.filter((row: any) => row.cleared_at);
-
-      if (clearedSettings.length === participantIds.length) {
-        console.log("[clearConversation] ALL PARTICIPANTS CLEARED, purging conversation", {
-          participantIds,
-          conversationId: data.conversationId,
-        });
-
-        const { data: purgeResult, error: purgeError } = await supabase.rpc("purge_conversation", {
-          _conv: data.conversationId,
-        } as any);
-        if (purgeError) {
-          clearError = purgeError.message;
-          debug.error = clearError;
-          console.error("[clearConversation] purge_conversation error", { error: purgeError });
-          throw new Error(purgeError.message);
-        }
-
-        const { data: deletedSaves, error: deleteSavedError } = await supabase
-          .from("message_saves" as any)
-          .delete()
-          .eq("conversation_id", data.conversationId)
-          .select();
-        if (deleteSavedError) {
-          clearError = deleteSavedError.message;
-          console.error("[clearConversation] delete saved error", { error: deleteSavedError });
-          throw new Error(deleteSavedError.message);
-        }
-
-        deletedRows += Array.isArray(deletedSaves) ? deletedSaves.length : 0;
-        debug.purged = true;
-
-        try {
-          const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-          const { data: objects, error: listError } = await supabaseAdmin.storage
-            .from("chat-media")
-            .list(data.conversationId, { limit: 1000 });
-          if (listError) {
-            console.warn("Failed to list chat-media objects for purge:", listError.message);
-          } else if (objects && objects.length > 0) {
-            const paths = objects.map((obj: any) => `${data.conversationId}/${obj.name}`);
-            const { error: removeError } = await supabaseAdmin.storage
-              .from("chat-media")
-              .remove(paths);
-            if (removeError) {
-              console.warn("Failed to delete chat-media files for purge:", removeError.message);
-            }
-          }
-        } catch (storageError) {
-          console.warn("Failed to cleanup chat-media after purge:", storageError);
-        }
-      }
-    }
-
-    // 5. If clearSaved is true, delete all saved messages for this user and conversation
-    if (data.clearSaved) {
-      const { data: deletedSaves, error: deleteSavedError } = await supabase
-        .from("message_saves" as any)
-        .delete()
-        .eq("user_id", userId)
-        .eq("conversation_id", data.conversationId)
-        .select();
-      if (deleteSavedError) {
-        clearError = deleteSavedError.message;
-        console.error("[clearConversation] delete saved error", { error: deleteSavedError });
-        throw new Error(deleteSavedError.message);
-      }
-      deletedRows += Array.isArray(deletedSaves) ? deletedSaves.length : 0;
-    }
-
-    console.log("[clearConversation] finished", {
-      userId,
-      conversationId: data.conversationId,
-      updatedRows,
-      deletedRows,
-      clearSaved: data.clearSaved,
-      clearError,
-      debug,
-    });
-    
-    return { ok: true, updatedRows, deletedRows, debug };
+    return {
+      ok: true,
+      updatedRows: 1,
+      deletedRows: Number(result?.deletedRows ?? result?.deleted_rows ?? 0),
+      debug: result ?? null,
+    };
   });
 
 export const removeFromInbox = createServerFn({ method: "POST" })

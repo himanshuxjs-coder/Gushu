@@ -20,7 +20,7 @@ export const listMessages = createServerFn({ method: "POST" })
         .maybeSingle(),
       supabase
         .from("conversation_settings")
-        .select("cleared_at, expiry_seconds, last_exit_at")
+        .select("cleared_at, cleared_through_seq, last_exit_at")
         .eq("conversation_id", data.conversationId)
         .eq("user_id", userId)
         .maybeSingle(),
@@ -29,7 +29,9 @@ export const listMessages = createServerFn({ method: "POST" })
     const conv = convResult.data as any;
     const userSettings = settingsResult.data as any;
     
-    console.log("[listMessages] Shared Expiry:", conv?.expiry_seconds, "User Exit:", userSettings?.last_exit_at, "cleared_at:", userSettings?.cleared_at, "ConvID:", data.conversationId);
+    const clearedThroughSeq = Number(userSettings?.cleared_through_seq ?? 0);
+
+    console.log("[listMessages] Shared Expiry:", conv?.expiry_seconds, "User Exit:", userSettings?.last_exit_at, "cleared_at:", userSettings?.cleared_at, "cleared_through_seq:", clearedThroughSeq, "ConvID:", data.conversationId);
     
     // If conversation settings don't exist for this user, they can't see the chat (or it will be created)
     if (!conv && !userSettings) {
@@ -53,9 +55,9 @@ export const listMessages = createServerFn({ method: "POST" })
       .select("*, profiles!deleted_by_id(username, display_name)")
       .eq("conversation_id", data.conversationId);
 
-    if (userSettings?.cleared_at) {
-      console.log("[listMessages] applying cleared_at filter", userSettings.cleared_at);
-      primaryQuery = primaryQuery.gt("created_at", userSettings.cleared_at);
+    if (clearedThroughSeq > 0) {
+      console.log("[listMessages] applying cleared_through_seq filter", clearedThroughSeq);
+      primaryQuery = primaryQuery.gt("clear_seq", clearedThroughSeq);
     }
 
     primaryQuery = primaryQuery
@@ -85,6 +87,7 @@ export const listMessages = createServerFn({ method: "POST" })
       primaryCount: primaryRows.length,
       savedCount: savedData.length,
       clearedAt: userSettings?.cleared_at,
+      clearedThroughSeq,
       earliest: createdTs[0] ?? null,
       latest: createdTs[createdTs.length - 1] ?? null,
     });
@@ -97,9 +100,10 @@ export const listMessages = createServerFn({ method: "POST" })
     const combinedMap = new Map<string, any>();
     primaryRows.forEach((r) => combinedMap.set(r.id, r));
     
-    // Add saved messages from any participant, even if they were created before a clear action.
+    // Add saved messages from any participant only if they remain visible after this user's clear boundary.
     savedData.forEach((s: any) => {
-      if (s.messages && !combinedMap.has(s.message_id)) {
+      const savedMessageClearSeq = Number(s.messages?.clear_seq ?? 0);
+      if (s.messages && savedMessageClearSeq > clearedThroughSeq && !combinedMap.has(s.message_id)) {
         combinedMap.set(s.message_id, s.messages);
       }
     });
