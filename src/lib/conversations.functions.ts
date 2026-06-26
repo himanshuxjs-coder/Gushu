@@ -32,14 +32,110 @@ export const checkConversationAccess = createServerFn({ method: "POST" })
     };
   });
 
+async function listMyConversationsFallback(supabase: any, userId: string) {
+  const { data: statusRows, error: statusError } = await supabase
+    .from("conversation_status")
+    .select("conversation_id")
+    .eq("user_id", userId);
+  if (statusError) throw new Error(statusError.message);
+  const conversationIds = (statusRows ?? []).map((row: any) => row.conversation_id).filter(Boolean);
+  if (conversationIds.length === 0) return [];
+
+  const [{ data: convRows, error: convError }, { data: settingsRows, error: settingsError }, { data: lastMsgRows, error: lastMsgError }] = await Promise.all([
+    supabase
+      .from("conversations")
+      .select("id, user1_id, user2_id, last_message_at")
+      .in("id", conversationIds),
+    supabase
+      .from("conversation_settings")
+      .select("conversation_id, is_hidden, is_locked, pin_hash, secret_code_hash, cleared_at, removed_at")
+      .in("conversation_id", conversationIds)
+      .eq("user_id", userId),
+    supabase
+      .from("messages")
+      .select("conversation_id, content, message_type, created_at, sender_id")
+      .in("conversation_id", conversationIds)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (convError) throw new Error(convError.message);
+  if (settingsError) throw new Error(settingsError.message);
+  if (lastMsgError) throw new Error(lastMsgError.message);
+
+  const settingsMap = new Map<string, any>();
+  for (const setting of settingsRows ?? []) {
+    settingsMap.set(setting.conversation_id, setting);
+  }
+
+  const lastMessageMap = new Map<string, any>();
+  for (const msg of lastMsgRows ?? []) {
+    if (!lastMessageMap.has(msg.conversation_id)) {
+      lastMessageMap.set(msg.conversation_id, msg);
+    }
+  }
+
+  const otherUserIds = Array.from(new Set((convRows ?? []).map((conv: any) =>
+    conv.user1_id === userId ? conv.user2_id : conv.user1_id
+  ).filter(Boolean)));
+
+  const { data: profileRows, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, username, display_name, avatar_url, verified, last_seen_at")
+    .in("id", otherUserIds);
+  if (profileError) throw new Error(profileError.message);
+
+  const profileMap = new Map<string, any>();
+  for (const profile of profileRows ?? []) {
+    profileMap.set(profile.id, profile);
+  }
+
+  return (convRows ?? []).map((conv: any) => {
+    const setting = settingsMap.get(conv.id) ?? {};
+    const otherId = conv.user1_id === userId ? conv.user2_id : conv.user1_id;
+    const other = profileMap.get(otherId) ?? null;
+    const last = lastMessageMap.get(conv.id) ?? null;
+    return {
+      id: conv.id,
+      other: other
+        ? {
+            id: other.id,
+            username: other.username,
+            display_name: other.display_name,
+            avatar_url: other.avatar_url,
+            verified: other.verified,
+            last_seen_at: other.last_seen_at,
+          }
+        : null,
+      last: last
+        ? {
+            content: last.content,
+            message_type: last.message_type,
+            created_at: last.created_at,
+            sender_id: last.sender_id,
+          }
+        : null,
+      unread: 0,
+      last_message_at: conv.last_message_at,
+      hidden: setting.is_hidden ?? false,
+      locked: setting.is_locked ?? false,
+      hasPin: !!setting.pin_hash,
+      hasSecretCode: !!setting.secret_code_hash,
+      cleared_at: setting.cleared_at,
+      removed_at: setting.removed_at,
+    };
+  });
+}
+
 export const listMyConversations = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
 
-    const { data: convs, error } = await supabase
-      .rpc("list_my_conversations" as any);
-    if (error) throw new Error(error.message);
+    const { data: convs, error } = await supabase.rpc("list_my_conversations" as any);
+    if (error) {
+      console.warn("[listMyConversations] RPC failed, falling back to direct query:", error.message);
+      return listMyConversationsFallback(supabase, userId);
+    }
 
     const hiddenConversationIds = (convs ?? [])
       .filter((c: any) => c.hidden)

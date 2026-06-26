@@ -109,11 +109,16 @@ function AppShell() {
   const conversations = useQuery({
     queryKey: ["conversations"],
     queryFn: () => listFn({ data: undefined as any }),
+    enabled: !!me,
+    retry: 1,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
   });
 
   const isAdminQ = useQuery({
     queryKey: ["amIAdmin"],
     queryFn: () => isAdminFn({ data: undefined as any }),
+    enabled: !!me,
   });
 
   // Single realtime channel for app-level updates
