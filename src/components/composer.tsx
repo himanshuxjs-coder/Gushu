@@ -57,6 +57,8 @@ export function Composer({
     viewLimit: null,
   });
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const submittingRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentRef = useRef<number>(0);
   const send = useServerFn(sendMessage);
@@ -194,9 +196,17 @@ export function Composer({
     [conversationId, createUpload, send, privacyOption],
   );
 
+  function refocusInput() {
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }
+
   async function submit() {
     const content = text.trim();
     if (!content || busy) return;
+
+    submittingRef.current = true;
     
     // 1. CLEAR & OPTIMISTICALLY UPDATE IMMEDIATELY (Instant UI)
     setText("");
@@ -243,6 +253,8 @@ export function Composer({
       setText(content);
     } finally {
       setBusy(false);
+      submittingRef.current = false;
+      if (isMobile) refocusInput();
     }
   }
 
@@ -354,6 +366,7 @@ export function Composer({
           }}
         />
         <Textarea
+          ref={textareaRef}
           value={text}
           onChange={(e) => {
             const newText = e.target.value;
@@ -365,6 +378,7 @@ export function Composer({
             onFocus?.();
           }}
           onBlur={() => {
+            if (submittingRef.current) return;
             setIsFocused(false);
             onBlur?.();
             // Clear typing on blur
@@ -409,6 +423,7 @@ export function Composer({
             <PrivacyOptionsPicker value={privacyOption} onChange={setPrivacyOption} />
             <Button
               type="button"
+              onPointerDown={(e) => e.preventDefault()}
               onClick={submit}
               disabled={busy || !text.trim()}
               className={cn("h-8 rounded-xl px-3 sm:h-10 sm:px-4 sm:gap-1.5")}
