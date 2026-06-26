@@ -113,7 +113,8 @@ function ChatPage() {
       return result;
     },
     enabled: !isLocked && !isHiddenLocked,
-    refetchInterval: 5000,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const hasSavedByMe = (msgs.data ?? []).some((m: any) => m.saved_by_me);
@@ -133,6 +134,7 @@ function ChatPage() {
 
   // Realtime subscription
   useEffect(() => {
+    if (!conversationId) return;
     if (realtimeRef.current) {
       supabase.removeChannel(realtimeRef.current);
       realtimeRef.current = null;
@@ -143,29 +145,46 @@ function ChatPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
-        () => debounceInvalidation(queryClient, [["messages", conversationId], ["conversations"]]),
-      )
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () =>
-        debounceInvalidation(queryClient, [["conversation", conversationId]]),
-      )
-      .on("postgres_changes", { event: "*", schema: "public", table: "message_reactions" }, () =>
-        debounceInvalidation(queryClient, [["messages", conversationId]]),
-      )
-      .on("postgres_changes", { event: "*", schema: "public", table: "message_deletions" }, () =>
-        debounceInvalidation(queryClient, [["messages", conversationId]]),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "conversation_settings", filter: `conversation_id=eq.${conversationId}` },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["conv-settings", conversationId] });
+        (payload) => {
+          const msg = payload.new as any;
+          if (!msg) return;
+
+          queryClient.setQueryData(["messages", conversationId], (old: any) => {
+            if (!Array.isArray(old)) return old;
+            switch (payload.eventType) {
+              case "INSERT":
+                if (old.some((item) => item.id === msg.id)) return old;
+                return [...old, msg];
+              case "UPDATE":
+                return old.map((item) => (item.id === msg.id ? { ...item, ...msg } : item));
+              case "DELETE":
+                return old.filter((item) => item.id !== msg.id);
+              default:
+                return old;
+            }
+          });
+
+          queryClient.setQueryData(["conversations"], (old: any) => {
+            if (!Array.isArray(old)) return old;
+            return old.map((conv: any) => {
+              if (conv.id !== conversationId) return conv;
+              return {
+                ...conv,
+                last: msg ? {
+                  content: msg.content,
+                  message_type: msg.message_type,
+                  created_at: msg.created_at,
+                  sender_id: msg.sender_id,
+                } : conv.last,
+                last_message_at: msg?.created_at ?? conv.last_message_at,
+              };
+            });
+          });
         },
       )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "message_saves", filter: `conversation_id=eq.${conversationId}` },
-        () => debounceInvalidation(queryClient, [["messages", conversationId]]),
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversation_settings", filter: `conversation_id=eq.${conversationId}` }, () => {
+        queryClient.invalidateQueries({ queryKey: ["conv-settings", conversationId] });
+      })
       .subscribe();
 
     realtimeRef.current = ch;
@@ -179,10 +198,17 @@ function ChatPage() {
   }, [conversationId, queryClient]);
 
   useEffect(() => {
-    if (msgs.data && msgs.data.length && !isLocked) {
-      mark({ data: { conversationId } }).catch(() => {});
-    }
-  }, [conversationId, msgs.data, isLocked, mark]);
+    if (!msgs.data?.length || isLocked) return;
+    const nowString = new Date().toISOString();
+    queryClient.setQueryData(["messages", conversationId], (old: any) => {
+      if (!Array.isArray(old)) return old;
+      return old.map((msg: any) => {
+        if (msg.sender_id === meId || msg.read_at) return msg;
+        return { ...msg, read_at: nowString };
+      });
+    });
+    mark({ data: { conversationId } }).catch(() => {});
+  }, [conversationId, msgs.data, isLocked, mark, meId, queryClient]);
 
   // Auto-scroll to bottom
   useEffect(() => {

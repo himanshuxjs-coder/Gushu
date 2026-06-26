@@ -125,20 +125,32 @@ function AppShell() {
 
     const ch = supabase
       .channel("app-feed")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
-        debounceInvalidation(queryClient, [["conversations"], ["messages"]]);
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        const message = payload.new as any;
+        if (!message) return;
+        queryClient.setQueryData(["conversations"], (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((conv: any) => {
+            if (conv.id !== message.conversation_id) return conv;
+            return {
+              ...conv,
+              last: {
+                content: message.content,
+                message_type: message.message_type,
+                created_at: message.created_at,
+                sender_id: message.sender_id,
+              },
+              last_message_at: message.created_at,
+            };
+          });
+        });
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
-        debounceInvalidation(queryClient, [["conversations"]]);
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversation_status" }, () => {
-        debounceInvalidation(queryClient, [["conversations"]]);
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
-        debounceInvalidation(queryClient, [["conversations"], ["conversation"]]);
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversation_settings" }, () => {
-        debounceInvalidation(queryClient, [["conversations"]]);
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "conversations" }, (payload) => {
+        const convUpdate = payload.new as any;
+        queryClient.setQueryData(["conversations"], (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((conv: any) => (conv.id === convUpdate.id ? { ...conv, ...convUpdate } : conv));
+        });
       })
       .subscribe();
 

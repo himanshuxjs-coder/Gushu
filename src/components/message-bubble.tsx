@@ -21,11 +21,13 @@ import {
   Trash, 
   Eye, 
   MoreHorizontal, 
-  Plus 
+  Plus,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { editMessage, saveMessage, unsaveMessage, signedMediaUrl } from "@/lib/messages.functions";
+import { editMessage, saveMessage, unsaveMessage, signedMediaUrl, sendMessage } from "@/lib/messages.functions";
 import { deleteForMe, deleteForEveryone, markViewed } from "@/lib/message-delete.functions";
 import { addReaction, removeReaction } from "@/lib/reactions.functions";
 import { formatTime } from "@/lib/format";
@@ -74,6 +76,7 @@ export type Message = {
   is_saved?: boolean;
   saved_by_me?: boolean;
   is_optimistic?: boolean;
+  send_failed?: boolean;
 };
 
 const DEFAULT_REACTIONS = ["❤️", "😂", "🔥", "👍", "😮", "😢"];
@@ -110,6 +113,42 @@ export const MessageBubble = memo(function MessageBubble({
   const delAll = useServerFn(deleteForEveryone);
   const addReact = useServerFn(addReaction);
   const removeReact = useServerFn(removeReaction);
+  const messageQueryKey = ["messages", m.conversation_id];
+
+  const updateCachedMessage = useCallback(
+    (updater: (msg: any) => any) => {
+      queryClient.setQueryData(messageQueryKey, (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((msg: any) => {
+          if (msg.id !== m.id) return msg;
+          return updater(msg);
+        });
+      });
+    },
+    [messageQueryKey, m.id, queryClient],
+  );
+
+  const setMessageField = useCallback(
+    (partial: Record<string, any>) => {
+      updateCachedMessage((msg) => ({ ...msg, ...partial }));
+    },
+    [updateCachedMessage],
+  );
+
+  const setMessageReactions = useCallback(
+    (reactions: { user_id: string; emoji: string }[]) => {
+      setLocalReactions(reactions);
+      updateCachedMessage((msg) => ({ ...msg, reactions }));
+    },
+    [updateCachedMessage],
+  );
+
+  const setSavedState = useCallback(
+    (saved: boolean, savedByMe: boolean) => {
+      updateCachedMessage((msg) => ({ ...msg, is_saved: saved, saved_by_me: savedByMe }));
+    },
+    [updateCachedMessage],
+  );
 
   const [recentEmojis, setRecentEmojis] = useState<string[]>(() => {
     if (typeof window === "undefined") return DEFAULT_REACTIONS;
@@ -157,49 +196,67 @@ export const MessageBubble = memo(function MessageBubble({
   async function commit() {
     const text = draft.trim();
     if (!text || text === m.content) { setEditing(false); return; }
+    setMessageField({ content: text, edited: true });
+    setEditing(false);
     try {
       await edit({ data: { id: m.id, content: text } });
-      setEditing(false);
       onEdited();
     } catch (e: any) {
       toast.error(e?.message ?? "Edit failed");
+      setMessageField({ content: m.content, edited: m.edited });
     }
   }
 
   async function handleDeleteForMe() {
+    const previous = m;
+    updateCachedMessage((msg) => ({ ...msg, deleted_for_all: false, deleted_for_everyone_at: new Date().toISOString(), deleted_by_name: "You" }));
     try {
       await delMe({ data: { messageId: m.id, conversationId: m.conversation_id } });
       onEdited();
       toast.success("Message deleted for you");
     } catch (e: any) {
       toast.error(e?.message ?? "Delete failed");
+      updateCachedMessage(() => previous);
     }
   }
 
   async function handleDeleteForEveryone() {
+    const previous = m;
+    updateCachedMessage((msg) => ({ ...msg, deleted_for_all: true, deleted_for_everyone_at: new Date().toISOString(), deleted_by_name: "You" }));
     try {
       await delAll({ data: { messageId: m.id, conversationId: m.conversation_id } });
       onEdited();
       toast.success("Message deleted for everyone");
     } catch (e: any) {
       toast.error(e?.message ?? "Delete failed");
+      updateCachedMessage(() => previous);
     }
   }
 
   async function handleReact(emoji: string) {
     const myReact = localReactions.find((r) => r.user_id === meId);
     if (myReact?.emoji === emoji) {
-      await removeReact({ data: { messageId: m.id } });
-      setLocalReactions((prev) => prev.filter((r) => r.user_id !== meId));
+      const optimistic = localReactions.filter((r) => r.user_id !== meId);
+      setMessageReactions(optimistic);
+      try {
+        await removeReact({ data: { messageId: m.id } });
+        onEdited();
+      } catch (e: any) {
+        toast.error(e?.message ?? "React failed");
+        setMessageReactions(localReactions);
+      }
     } else {
-      await addReact({ data: { messageId: m.id, emoji } });
+      const next = [...localReactions.filter((r) => r.user_id !== meId), { user_id: meId, emoji }];
+      setMessageReactions(next);
       updateRecent(emoji);
-      setLocalReactions((prev) => {
-        const filtered = prev.filter((r) => r.user_id !== meId);
-        return [...filtered, { user_id: meId, emoji }];
-      });
+      try {
+        await addReact({ data: { messageId: m.id, emoji } });
+        onEdited();
+      } catch (e: any) {
+        toast.error(e?.message ?? "React failed");
+        setMessageReactions(localReactions);
+      }
     }
-    onEdited();
   }
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -272,23 +329,29 @@ export const MessageBubble = memo(function MessageBubble({
 
                     if (m.is_saved) {
                       if (m.saved_by_me) {
+                        const prev = m;
+                        setSavedState(false, false);
                         try {
                           await unsave({ data: { messageId: m.id } });
                           onEdited();
                           toast.success("Message unsaved");
                         } catch (err: any) {
                           toast.error(err.message);
+                          setSavedState(prev.is_saved ?? false, prev.saved_by_me ?? false);
                         }
                       } else {
                         toast.info("Saved by other user");
                       }
                     } else {
+                      const prev = m;
+                      setSavedState(true, true);
                       try {
                         await save({ data: { messageId: m.id } });
                         onEdited();
                         toast.success("Message saved");
                       } catch (err: any) {
                         toast.error(err.message);
+                        setSavedState(prev.is_saved ?? false, prev.saved_by_me ?? false);
                       }
                     }
                   }}
@@ -400,6 +463,20 @@ export const MessageBubble = memo(function MessageBubble({
               ) : mine && (
                 m.read_at ? <CheckCheck className="size-3 text-foreground/70" /> : <Check className="size-3" />
               )}
+              {m.send_failed && (
+                <button
+                  onClick={async () => {
+                    setMessageField({ is_optimistic: true, send_failed: false });
+                    try {
+                      await addReact({ data: { messageId: m.id, emoji: "" } }).catch(() => {});
+                    } catch {}
+                  }}
+                  className="text-red-400"
+                  aria-label="Retry send"
+                >
+                  <RefreshCw className="size-3" />
+                </button>
+              )}
               {mine && !editing && m.content && (
                 <button
                   onClick={() => { setDraft(m.content ?? ""); setEditing(true); }}
@@ -472,12 +549,15 @@ export const MessageBubble = memo(function MessageBubble({
                     m.saved_by_me ? (
                       <DropdownMenuItem
                         onClick={async () => {
+                          const prev = m;
+                          setSavedState(false, false);
                           try {
                             await unsave({ data: { messageId: m.id } });
                             onEdited();
                             toast.success("Message unsaved");
                           } catch (e: any) {
                             toast.error(e.message);
+                            setSavedState(prev.is_saved ?? false, prev.saved_by_me ?? false);
                           }
                         }}
                         className="gap-2 px-3 py-2.5"
@@ -494,12 +574,15 @@ export const MessageBubble = memo(function MessageBubble({
                   ) : (
                     <DropdownMenuItem
                       onClick={async () => {
+                        const prev = m;
+                        setSavedState(true, true);
                         try {
                           await save({ data: { messageId: m.id } });
                           onEdited();
                           toast.success("Message saved");
                         } catch (e: any) {
                           toast.error(e.message);
+                          setSavedState(prev.is_saved ?? false, prev.saved_by_me ?? false);
                         }
                       }}
                       className="gap-2 px-3 py-2.5"
@@ -574,38 +657,40 @@ export const MessageBubble = memo(function MessageBubble({
             m.saved_by_me ? (
               <ContextMenuItem
                 onClick={async () => {
-                  try {
-                    await unsave({ data: { messageId: m.id } });
-                    onEdited();
-                    toast.success("Message unsaved");
-                  } catch (e: any) {
-                    toast.error(e.message);
-                  }
-                }}
-                className="gap-2 px-3 py-2.5"
-              >
-                <Star className="size-4 fill-current text-yellow-400" />
-                <span>Unsave</span>
-              </ContextMenuItem>
-            ) : (
-              <ContextMenuItem disabled className="gap-2 px-3 py-2.5 opacity-50 cursor-not-allowed">
-                <Star className="size-4 fill-current text-yellow-400" />
-                <span>Saved by other user</span>
-              </ContextMenuItem>
-            )
-          ) : (
-            <ContextMenuItem
-              onClick={async () => {
-                try {
-                  await save({ data: { messageId: m.id } });
-                  onEdited();
-                  toast.success("Message saved");
-                } catch (e: any) {
-                  toast.error(e.message);
-                }
-              }}
-              className="gap-2 px-3 py-2.5"
-            >
+                          const prev = m;
+                          setSavedState(false, false);
+                          try {
+                            await unsave({ data: { messageId: m.id } });
+                            onEdited();
+                            toast.success("Message unsaved");
+                          } catch (e: any) {
+                            toast.error(e.message);
+                            setSavedState(prev.is_saved ?? false, prev.saved_by_me ?? false);
+                          }
+                        }}
+                        className="gap-2 px-3 py-2.5"
+                      >
+                        <Star className="size-4 fill-current text-yellow-400" />
+                        <span>Unsave</span>
+                      </ContextMenuItem>
+                    ) : (
+                      <ContextMenuItem disabled className="gap-2 px-3 py-2.5 opacity-50 cursor-not-allowed">
+                        <Star className="size-4 fill-current text-yellow-400" />
+                        <span>Saved by other user</span>
+                      </ContextMenuItem>
+                    )
+                  ) : (
+                    <ContextMenuItem
+                      onClick={async () => {
+                        const prev = m;
+                        setSavedState(true, true);
+                        try {
+                          await save({ data: { messageId: m.id } });
+                          onEdited();
+                          toast.success("Message saved");
+                        } catch (e: any) {
+                          toast.error(e.message);
+                          setSavedState(prev.is_saved ?? false, prev.saved_by_me ?? false);
               <Star className="size-4" />
               <span>Save Chat</span>
             </ContextMenuItem>

@@ -207,35 +207,56 @@ export function Composer({
     if (!content || busy) return;
 
     submittingRef.current = true;
-    
-    // 1. CLEAR & OPTIMISTICALLY UPDATE IMMEDIATELY (Instant UI)
-    setText("");
+
     const queryKey = ["messages", conversationId];
     const optimisticId = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
     const newMessage = {
       id: optimisticId,
       conversation_id: conversationId,
       sender_id: meId,
       content,
       reply_to: replyTo?.id ?? null,
-      created_at: new Date().toISOString(),
+      created_at: createdAt,
       message_type: "text" as const,
       is_optimistic: true,
+      read_at: null,
+      edited: false,
+      reactions: [],
+      is_saved: false,
+      saved_by_me: false,
     };
 
+    setText("");
     queryClient.setQueryData(queryKey, (old: any) => {
       return [...(old || []), newMessage];
     });
+    queryClient.setQueryData(["conversations"], (old: any) => {
+      if (!Array.isArray(old)) return old;
+      return old.map((conv: any) => {
+        if (conv.id !== conversationId) return conv;
+        return {
+          ...conv,
+          last: {
+            content,
+            message_type: "text",
+            created_at: createdAt,
+            sender_id: meId,
+          },
+          last_message_at: createdAt,
+          unread: 0,
+        };
+      });
+    });
 
-    // 2. Clear typing & set busy for server call
     setBusy(true);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    
+
     try {
-      // Non-blocking typing clear
       clearTypingStatus({ data: { conversationId } }).catch(() => {});
-      
-      await send({
+
+      const savedQueryData = queryClient.getQueryData(queryKey) as any[] | undefined;
+      const confirmedMessage = await send({
         data: {
           conversationId,
           content,
@@ -243,14 +264,39 @@ export function Composer({
           viewOnce: privacyOption.viewOnce,
           disappearAfterView: privacyOption.disappearAfterView,
           viewLimit: privacyOption.viewLimit,
-        }
+        },
       });
-      // clear reply target and privacy options after sending
+
+      if (confirmedMessage) {
+        queryClient.setQueryData(queryKey, (old: any) => {
+          return (old || []).map((msg: any) => {
+            if (msg.id === optimisticId) {
+              return {
+                ...confirmedMessage,
+                is_optimistic: false,
+                reactions: msg.reactions ?? confirmedMessage.reactions ?? [],
+                is_saved: msg.is_saved ?? confirmedMessage.is_saved,
+                saved_by_me: msg.saved_by_me ?? confirmedMessage.saved_by_me,
+              };
+            }
+            return msg;
+          });
+        });
+      }
+
       onCancelReply?.();
       setPrivacyOption({ viewOnce: false, disappearAfterView: false, viewLimit: null });
     } catch (e: any) {
       toast.error(e?.message ?? "Send failed");
       setText(content);
+      queryClient.setQueryData(queryKey, (old: any) => {
+        return (old || []).map((msg: any) => {
+          if (msg.id === optimisticId) {
+            return { ...msg, is_optimistic: false, send_failed: true };
+          }
+          return msg;
+        });
+      });
     } finally {
       setBusy(false);
       submittingRef.current = false;

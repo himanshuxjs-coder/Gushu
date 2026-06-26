@@ -75,7 +75,10 @@ export const ConversationList = memo(function ConversationList({
     try {
       await clear({ data: { conversationId: convId } });
       toast.success("Chat history cleared");
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.setQueryData(["conversations"], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((conv: any) => (conv.id === convId ? { ...conv, cleared_at: new Date().toISOString() } : conv));
+      });
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to clear chat");
     }
@@ -85,7 +88,10 @@ export const ConversationList = memo(function ConversationList({
     try {
       await leave({ data: { id: convId } });
       toast.success("Conversation removed");
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.setQueryData(["conversations"], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.filter((conv: any) => conv.id !== convId);
+      });
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to remove chat");
     }
@@ -95,7 +101,10 @@ export const ConversationList = memo(function ConversationList({
     try {
       await toggleHidden({ data: { conversationId: convId, hidden: !current } });
       toast.success(current ? "Chat unhidden" : "Chat hidden");
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.setQueryData(["conversations"], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((conv: any) => (conv.id === convId ? { ...conv, hidden: !current } : conv));
+      });
     } catch (e: any) {
       toast.error(e?.message ?? "Action failed");
     }
@@ -105,7 +114,10 @@ export const ConversationList = memo(function ConversationList({
     try {
       await remove({ data: { conversationId: convId } });
       toast.success("Removed from inbox");
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.setQueryData(["conversations"], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.filter((conv: any) => conv.id !== convId);
+      });
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to remove chat");
     }
