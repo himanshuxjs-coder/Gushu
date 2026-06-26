@@ -698,17 +698,21 @@ export const MessageBubble = memo(function MessageBubble({
                         } catch (e: any) {
                           toast.error(e.message);
                           setSavedState(prev.is_saved ?? false, prev.saved_by_me ?? false);
-              <Star className="size-4" />
-              <span>Save Chat</span>
-            </ContextMenuItem>
-          )}
+                        }
+                      }}
+                      className="gap-2 px-3 py-2.5"
+                    >
+                      <Star className="size-4" />
+                      <span>Save Chat</span>
+                    </ContextMenuItem>
+                  )}
 
-          {mine && m.content && (
-            <ContextMenuItem onClick={() => { setDraft(m.content ?? ""); setEditing(true); }} className="gap-2 px-3 py-2.5">
-              <Edit2 className="size-4 opacity-70" />
-              <span>Edit</span>
-            </ContextMenuItem>
-          )}
+                  {mine && m.content && (
+                    <ContextMenuItem onClick={() => { setDraft(m.content ?? ""); setEditing(true); }} className="gap-2 px-3 py-2.5">
+                      <Edit2 className="size-4 opacity-70" />
+                      <span>Edit</span>
+                    </ContextMenuItem>
+                  )}
 
           <ContextMenuSeparator />
           
