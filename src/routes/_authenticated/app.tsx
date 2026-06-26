@@ -109,10 +109,11 @@ function AppShell() {
   const conversations = useQuery({
     queryKey: ["conversations"],
     queryFn: () => listFn({ data: undefined as any }),
-    enabled: !!me,
-    retry: 1,
+    enabled: meQuery.isSuccess && !!me,
+    retry: 2,
     staleTime: 60000,
     refetchOnWindowFocus: false,
+    onError: (err) => console.error("[conversations] query failed:", err),
   });
 
   const isAdminQ = useQuery({
@@ -244,7 +245,9 @@ function AppShell() {
           {conversations.isError && (
             <div className="flex flex-col items-center justify-center gap-2 p-6 text-center text-sm text-red-400">
               <AlertCircle className="size-5" />
-              <p>Failed to load conversations</p>
+              <p>
+                Failed to load conversations{conversations.error?.message ? `: ${conversations.error.message}` : ""}
+              </p>
               <button
                 onClick={() => conversations.refetch()}
                 className="text-xs underline underline-offset-2 hover:no-underline"

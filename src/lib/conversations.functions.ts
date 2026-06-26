@@ -36,11 +36,13 @@ async function listMyConversationsFallback(supabase: any, userId: string) {
   const { data: statusRows, error: statusError } = await supabase
     .from("conversation_status")
     .select("conversation_id")
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("has_left", false);
   if (statusError) throw new Error(statusError.message);
   const conversationIds = (statusRows ?? []).map((row: any) => row.conversation_id).filter(Boolean);
   if (conversationIds.length === 0) return [];
 
+  const lastMsgLimit = Math.min(conversationIds.length * 5, 200);
   const [{ data: convRows, error: convError }, { data: settingsRows, error: settingsError }, { data: lastMsgRows, error: lastMsgError }] = await Promise.all([
     supabase
       .from("conversations")
@@ -55,7 +57,8 @@ async function listMyConversationsFallback(supabase: any, userId: string) {
       .from("messages")
       .select("conversation_id, content, message_type, created_at, sender_id")
       .in("conversation_id", conversationIds)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(lastMsgLimit),
   ]);
 
   if (convError) throw new Error(convError.message);

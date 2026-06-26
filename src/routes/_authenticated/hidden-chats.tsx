@@ -15,6 +15,9 @@ function HiddenChatsPage() {
   const conversations = useQuery({
     queryKey: ["conversations"],
     queryFn: () => listFn({ data: undefined as any }),
+    retry: 2,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
   });
 
   return (
