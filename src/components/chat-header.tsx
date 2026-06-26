@@ -138,10 +138,14 @@ export function ChatHeader({
       console.log("[handleClearChat] mutation started", { conversationId, clearSaved: alsoClearSaved });
       const result = await clearFn({ data: { conversationId, clearSaved: alsoClearSaved } });
       console.log("[handleClearChat] mutation finished", { conversationId, clearSaved: alsoClearSaved, result });
+      const clearedAt = new Date().toISOString();
       toast.success(alsoClearSaved ? "All messages cleared" : "Chat history cleared (saved kept)");
-      queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
-      queryClient.invalidateQueries({ queryKey: ["conv-settings", conversationId] });
-      onSettingsChange({ cleared_at: new Date().toISOString() });
+      queryClient.setQueryData(["conv-settings", conversationId], (old: any) => ({ ...old, cleared_at: clearedAt }));
+      queryClient.setQueryData(["messages", conversationId], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return alsoClearSaved ? [] : old.filter((msg: any) => msg.is_saved || new Date(msg.created_at).getTime() > new Date(clearedAt).getTime());
+      });
+      onSettingsChange({ cleared_at: clearedAt });
       setClearOpen(false);
     } catch (e: any) {
       console.error("[handleClearChat] mutation error", e);
@@ -168,6 +172,11 @@ export function ChatHeader({
     const hidden = !settings?.is_hidden;
     try {
       await hideFn({ data: { conversationId, hidden } });
+      queryClient.setQueryData(["conv-settings", conversationId], (old: any) => ({ ...old, is_hidden: hidden }));
+      queryClient.setQueryData(["conversations"], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((conv: any) => (conv.id === conversationId ? { ...conv, hidden } : conv));
+      });
       onSettingsChange({ is_hidden: hidden });
       toast.success(hidden ? "Conversation hidden" : "Conversation visible again");
     } catch (e: any) {

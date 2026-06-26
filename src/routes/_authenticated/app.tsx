@@ -83,7 +83,7 @@ function AppShell() {
   useEffect(() => {
     if (!me?.id) return;
     notifCleanupRef.current = initializeGlobalNotifications(me.id, () => {
-      debounceInvalidation(queryClient, [["conversations"], ["messages"]]);
+      debounceInvalidation(queryClient, [["conversations"]]);
     });
     return () => {
       if (notifCleanupRef.current) {

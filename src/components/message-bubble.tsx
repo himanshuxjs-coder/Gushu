@@ -111,8 +111,10 @@ export const MessageBubble = memo(function MessageBubble({
   const edit = useServerFn(editMessage);
   const delMe = useServerFn(deleteForMe);
   const delAll = useServerFn(deleteForEveryone);
+  const retrySend = useServerFn(sendMessage);
   const addReact = useServerFn(addReaction);
   const removeReact = useServerFn(removeReaction);
+  const queryClient = useQueryClient();
   const messageQueryKey = ["messages", m.conversation_id];
 
   const updateCachedMessage = useCallback(
@@ -200,7 +202,6 @@ export const MessageBubble = memo(function MessageBubble({
     setEditing(false);
     try {
       await edit({ data: { id: m.id, content: text } });
-      onEdited();
     } catch (e: any) {
       toast.error(e?.message ?? "Edit failed");
       setMessageField({ content: m.content, edited: m.edited });
@@ -212,7 +213,6 @@ export const MessageBubble = memo(function MessageBubble({
     updateCachedMessage((msg) => ({ ...msg, deleted_for_all: false, deleted_for_everyone_at: new Date().toISOString(), deleted_by_name: "You" }));
     try {
       await delMe({ data: { messageId: m.id, conversationId: m.conversation_id } });
-      onEdited();
       toast.success("Message deleted for you");
     } catch (e: any) {
       toast.error(e?.message ?? "Delete failed");
@@ -225,7 +225,6 @@ export const MessageBubble = memo(function MessageBubble({
     updateCachedMessage((msg) => ({ ...msg, deleted_for_all: true, deleted_for_everyone_at: new Date().toISOString(), deleted_by_name: "You" }));
     try {
       await delAll({ data: { messageId: m.id, conversationId: m.conversation_id } });
-      onEdited();
       toast.success("Message deleted for everyone");
     } catch (e: any) {
       toast.error(e?.message ?? "Delete failed");
@@ -240,7 +239,6 @@ export const MessageBubble = memo(function MessageBubble({
       setMessageReactions(optimistic);
       try {
         await removeReact({ data: { messageId: m.id } });
-        onEdited();
       } catch (e: any) {
         toast.error(e?.message ?? "React failed");
         setMessageReactions(localReactions);
@@ -251,7 +249,6 @@ export const MessageBubble = memo(function MessageBubble({
       updateRecent(emoji);
       try {
         await addReact({ data: { messageId: m.id, emoji } });
-        onEdited();
       } catch (e: any) {
         toast.error(e?.message ?? "React failed");
         setMessageReactions(localReactions);
@@ -333,7 +330,6 @@ export const MessageBubble = memo(function MessageBubble({
                         setSavedState(false, false);
                         try {
                           await unsave({ data: { messageId: m.id } });
-                          onEdited();
                           toast.success("Message unsaved");
                         } catch (err: any) {
                           toast.error(err.message);
@@ -468,8 +464,19 @@ export const MessageBubble = memo(function MessageBubble({
                   onClick={async () => {
                     setMessageField({ is_optimistic: true, send_failed: false });
                     try {
-                      await addReact({ data: { messageId: m.id, emoji: "" } }).catch(() => {});
-                    } catch {}
+                      await retrySend({
+                        data: {
+                          conversationId: m.conversation_id,
+                          content: m.content ?? undefined,
+                          replyTo: m.reply_to ?? undefined,
+                          viewOnce: m.view_once,
+                          disappearAfterView: m.disappear_after_view,
+                          viewLimit: m.view_limit,
+                        },
+                      });
+                    } catch (err) {
+                      setMessageField({ is_optimistic: false, send_failed: true });
+                    }
                   }}
                   className="text-red-400"
                   aria-label="Retry send"

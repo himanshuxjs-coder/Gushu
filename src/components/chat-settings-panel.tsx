@@ -169,12 +169,16 @@ export function ChatSettingsPanel({
   }
 
   async function handleClear() {
+    const clearedAt = new Date().toISOString();
     try {
       await clearFn({ data: { conversationId } });
       toast.success("Conversation history cleared for you");
-      queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
-      queryClient.invalidateQueries({ queryKey: ["conv-settings", conversationId] });
-      onSettingsChange({ cleared_at: new Date().toISOString() });
+      queryClient.setQueryData(["conv-settings", conversationId], (old: any) => ({ ...old, cleared_at: clearedAt }));
+      queryClient.setQueryData(["messages", conversationId], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.filter((msg: any) => msg.is_saved || new Date(msg.created_at).getTime() > new Date(clearedAt).getTime());
+      });
+      onSettingsChange({ cleared_at: clearedAt });
       onClose();
     } catch (e: any) {
       toast.error(e?.message ?? "Failed");

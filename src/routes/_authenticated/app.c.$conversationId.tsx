@@ -313,34 +313,13 @@ function ChatPage() {
     };
   }, [conversationId, getTyping]);
 
-  // Notification subscription (Supabase Realtime)
-  useEffect(() => {
-    if (!meId || isLocked) return;
-    if (notifRef.current) {
-      notifRef.current();
-      notifRef.current = null;
-    }
-    notifRef.current = subscribeToMessageNotifications(meId, (convId) => {
-      if (convId === conversationId) {
-        queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
-      }
-    });
-    return () => {
-      if (notifRef.current) {
-        notifRef.current();
-        notifRef.current = null;
-      }
-    };
-  }, [meId, conversationId, isLocked, queryClient]);
+  // Global notification feed is handled by the app shell; chat page relies on realtime updates and local cache mutations.
 
-  const onEdited = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ["messages", conversationId] }),
-    [queryClient, conversationId],
-  );
+  const onEdited = useCallback(() => {}, []);
 
-  function handleSettingsChange(_partial: any) {
-    console.log("[ChatPage] handleSettingsChange", { conversationId, partial: _partial });
-    queryClient.invalidateQueries({ queryKey: ["conv-settings", conversationId] });
+  function handleSettingsChange(partial: any) {
+    console.log("[ChatPage] handleSettingsChange", { conversationId, partial });
+    queryClient.setQueryData(["conv-settings", conversationId], (old: any) => ({ ...old, ...partial }));
   }
 
   async function handlePinVerify(pin: string): Promise<boolean | void> {
