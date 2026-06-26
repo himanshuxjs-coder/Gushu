@@ -127,6 +127,38 @@ function RootShell({ children }: { children: ReactNode }) {
             __html: `try{var t=localStorage.getItem('gushu-theme');var d=t==='dark'||(!t&&true);if(d)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');}catch(e){}`,
           }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){
+  try {
+    if (${import.meta.env.PROD}) {
+      const disable = ['log','warn','error','info','debug','trace','table','dir','group','groupCollapsed','groupEnd','count','countReset','time','timeEnd','timeLog','assert','clear'];
+      disable.forEach((key) => {
+        if (console[key]) console[key] = function() {};
+      });
+      window.addEventListener('contextmenu', function (event) {
+        event.preventDefault();
+      }, { passive: false });
+      window.addEventListener('keydown', function (event) {
+        const key = event.key?.toLowerCase();
+        if (event.key === 'F12' || ((event.ctrlKey || event.metaKey) && ['i', 'j', 'u', 'c', 's'].includes(key))) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }, { passive: false });
+      window.addEventListener('error', function (event) {
+        event.preventDefault();
+      });
+      window.addEventListener('unhandledrejection', function (event) {
+        event.preventDefault();
+      });
+    }
+  } catch (reason) {
+    // Swallow any safety initialization error so the app still loads.
+  }
+})();`,
+          }}
+        />
       </head>
       <body className="bg-textured min-h-screen">
         {children}
