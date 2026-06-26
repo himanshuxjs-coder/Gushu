@@ -32,7 +32,7 @@ export const checkConversationAccess = createServerFn({ method: "POST" })
     };
   });
 
-export const listMyConversations = createServerFn({ method: "GET" })
+export const listMyConversations = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;

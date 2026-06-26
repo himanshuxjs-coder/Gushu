@@ -196,11 +196,11 @@ export function Composer({
     [conversationId, createUpload, send, privacyOption],
   );
 
-  function refocusInput() {
+  const refocusInput = useCallback(() => {
     requestAnimationFrame(() => {
-      textareaRef.current?.focus();
+      textareaRef.current?.focus({ preventScroll: true });
     });
-  }
+  }, []);
 
   async function submit() {
     const content = text.trim();
@@ -423,7 +423,14 @@ export function Composer({
             <PrivacyOptionsPicker value={privacyOption} onChange={setPrivacyOption} />
             <Button
               type="button"
-              onPointerDown={(e) => e.preventDefault()}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                refocusInput();
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                refocusInput();
+              }}
               onClick={submit}
               disabled={busy || !text.trim()}
               className={cn("h-8 rounded-xl px-3 sm:h-10 sm:px-4 sm:gap-1.5")}
