@@ -116,6 +116,8 @@ function ChatPage() {
     refetchInterval: 5000,
   });
 
+  const hasSavedByMe = (msgs.data ?? []).some((m: any) => m.saved_by_me);
+
   useEffect(() => {
     if (msgs.data) {
       console.log("[ChatPage] msgs.data changed", { conversationId, count: msgs.data.length });
@@ -348,6 +350,7 @@ function ChatPage() {
         isHiddenLocked={isHiddenLocked}
         loading={conv.isLoading && !conv.data}
         isCollapsed={isInputFocused}
+        hasSavedByMe={hasSavedByMe}
       />
 
       {/* Locked screen */}
@@ -395,15 +398,14 @@ function ChatPage() {
               </div>
             )}
             {msgs.data?.filter((m: any) => {
-              const clearedThroughSeq = Number((settings as any)?.cleared_through_seq ?? 0);
-              const messageClearSeq = Number(m.clear_seq ?? 0);
-
-              if (clearedThroughSeq > 0 && messageClearSeq <= clearedThroughSeq) {
-                return false;
-              }
-
               // Local filter: Hide if expired and NOT saved.
               if (m.is_saved) return true;
+              
+              if (settings?.cleared_at) {
+                const clearedAt = new Date(settings.cleared_at).getTime();
+                const createdAt = new Date(m.created_at).getTime();
+                if (createdAt <= clearedAt) return false;
+              }
 
               const now = Date.now();
 

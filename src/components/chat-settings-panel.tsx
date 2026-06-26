@@ -99,8 +99,6 @@ type Settings = {
   pin_hash?: string | null;
   notification_enabled?: boolean;
   secret_code_hash?: string | null;
-  cleared_at?: string | null;
-  cleared_through_seq?: number | null;
 };
 
 interface ChatSettingsPanelProps {
