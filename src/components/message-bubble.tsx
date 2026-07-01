@@ -794,43 +794,32 @@ function MediaBlock({ m, mine }: { m: Message; mine: boolean }) {
 
         {viewerOpen && url && (
           <div
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 px-3 py-4 backdrop-blur-sm sm:px-4"
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 px-2 py-3 backdrop-blur-sm sm:px-4"
             role="dialog"
             aria-modal="true"
             onClick={() => setViewerOpen(false)}
           >
             <div
-              className="flex max-h-[92vh] max-w-[92vw] flex-col overflow-hidden rounded-3xl border border-white/10 bg-background/95 shadow-2xl backdrop-blur-xl"
+              className="relative flex max-h-[94vh] max-w-[94vw] items-center justify-center overflow-hidden rounded-[24px] border border-white/10 bg-background/95 shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-3 py-2 sm:px-4">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => setViewerOpen(false)}>
-                    <ArrowLeft className="size-4" />
-                  </Button>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{m.media_name ?? "Image"}</p>
-                    <p className="text-xs text-muted-foreground">Responsive, zoomable preview</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setZoom((value) => Math.max(1, Number((value - 0.25).toFixed(2))))}>
-                    <ZoomOut className="size-4" />
-                  </Button>
-                  <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setZoom((value) => Math.min(3, Number((value + 0.25).toFixed(2))))}>
-                    <ZoomIn className="size-4" />
-                  </Button>
-                  <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setZoom(1)}>
-                    <RotateCcw className="size-4" />
-                  </Button>
-                  <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setViewerOpen(false)}>
-                    <X className="size-4" />
-                  </Button>
-                </div>
+              <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 p-1 backdrop-blur-md">
+                <Button type="button" variant="ghost" size="icon" className="size-8 rounded-full text-white hover:bg-white/10 hover:text-white" onClick={() => setZoom((value) => Math.max(1, Number((value - 0.25).toFixed(2))))}>
+                  <ZoomOut className="size-4" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="size-8 rounded-full text-white hover:bg-white/10 hover:text-white" onClick={() => setZoom((value) => Math.min(3, Number((value + 0.25).toFixed(2))))}>
+                  <ZoomIn className="size-4" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="size-8 rounded-full text-white hover:bg-white/10 hover:text-white" onClick={() => setZoom(1)}>
+                  <RotateCcw className="size-4" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="size-8 rounded-full text-white hover:bg-white/10 hover:text-white" onClick={() => setViewerOpen(false)}>
+                  <ArrowLeft className="size-4" />
+                </Button>
               </div>
 
               <div
-                className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-black/5 p-3 sm:p-4"
+                className="flex min-h-0 max-h-[94vh] max-w-[94vw] items-center justify-center overflow-auto bg-black/5 p-2 sm:p-4"
                 onWheel={(event) => {
                   event.preventDefault();
                   setZoom((value) => {
@@ -842,7 +831,7 @@ function MediaBlock({ m, mine }: { m: Message; mine: boolean }) {
                 <img
                   src={url}
                   alt={m.media_name ?? ""}
-                  className="max-h-[70vh] max-w-[85vw] object-contain transition-transform duration-200"
+                  className="max-h-[86vh] max-w-[90vw] object-contain transition-transform duration-200"
                   style={{ transform: `scale(${zoom})` }}
                 />
               </div>
@@ -927,3 +916,4 @@ function AudioPlayer({ src }: { src: string }) {
     </div>
   );
 }
+
