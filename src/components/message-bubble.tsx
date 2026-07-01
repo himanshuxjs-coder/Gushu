@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
-import { Copy, Reply, Smile, Trash2, Check, CheckCheck, Clock, EyeOff, RotateCcw, CreditCard as Edit2, Star, FileText, Play, Pause, Trash, MoveHorizontal as MoreHorizontal, Plus, RefreshCw, Info } from "lucide-react";
+import { Copy, Reply, Smile, Trash2, Check, CheckCheck, Clock, EyeOff, RotateCcw, CreditCard as Edit2, Star, FileText, Play, Pause, Trash, MoveHorizontal as MoreHorizontal, Plus, RefreshCw, Info, X, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { editMessage, saveMessage, unsaveMessage, signedMediaUrl, sendMessage } from "@/lib/messages.functions";
@@ -707,6 +707,8 @@ function MediaBlock({ m, mine }: { m: Message; mine: boolean }) {
   const sign = useServerFn(signedMediaUrl);
   const [url, setUrl] = useState<string | null>(null);
   const [opened, setOpened] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const markViewedFn = useServerFn(markViewed);
   const queryClient = useQueryClient();
 
@@ -721,6 +723,19 @@ function MediaBlock({ m, mine }: { m: Message; mine: boolean }) {
     return () => { cancel = true; };
   }, [m.media_path, sign]);
 
+  useEffect(() => {
+    if (!viewerOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setViewerOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [viewerOpen]);
+
   const handleView = async () => {
     if (!mine && !opened) {
       setOpened(true);
@@ -731,23 +746,105 @@ function MediaBlock({ m, mine }: { m: Message; mine: boolean }) {
     }
   };
 
+  const openViewer = async (event?: React.MouseEvent) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (hasExpiry && !opened && !mine) {
+      try {
+        await handleView();
+      } catch {}
+    }
+    setZoom(1);
+    setViewerOpen(true);
+  };
+
   if (m.message_type === "image") {
     return (
-      <div className="mb-2 overflow-hidden rounded-xl ring-1 ring-black/10">
-        {hasExpiry && !opened && !mine ? (
-          <button
-            onClick={handleView}
-            className="flex h-40 w-full flex-col items-center justify-center gap-2 bg-white/10 text-xs opacity-70 transition-opacity hover:opacity-100"
+      <>
+        <div className="mb-2 overflow-hidden rounded-xl ring-1 ring-black/10">
+          {hasExpiry && !opened && !mine ? (
+            <button
+              type="button"
+              onClick={() => void openViewer()}
+              className="flex h-40 w-full flex-col items-center justify-center gap-2 bg-white/10 text-xs opacity-70 transition-opacity hover:opacity-100"
+            >
+              <EyeOff className="size-5" />
+              <span>Tap to view once</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={(event) => void openViewer(event)}
+              className="group block w-full cursor-zoom-in text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+              aria-label="Open image"
+            >
+              {url ? (
+                <div className="relative">
+                  <img src={url} alt={m.media_name ?? ""} className="max-h-80 w-full object-cover transition-transform duration-200 group-hover:scale-[1.01]" />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-end bg-gradient-to-t from-black/40 to-transparent px-2 py-2 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    Tap to zoom
+                  </div>
+                </div>
+              ) : (
+                <div className="h-40 animate-pulse bg-muted-foreground/10" />
+              )}
+            </button>
+          )}
+        </div>
+
+        {viewerOpen && url && (
+          <div
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 px-3 py-4 backdrop-blur-sm sm:px-4"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setViewerOpen(false)}
           >
-            <EyeOff className="size-5" />
-            <span>Tap to view once</span>
-          </button>
-        ) : (
-          <a href={url ?? "#"} target="_blank" rel="noreferrer" className="block" onClick={!opened && !mine && hasExpiry ? handleView : undefined}>
-            {url ? <img src={url} alt={m.media_name ?? ""} className="max-h-80 w-full object-cover" /> : <div className="h-40 animate-pulse bg-muted-foreground/10" />}
-          </a>
+            <div
+              className="flex max-h-[92vh] max-w-[92vw] flex-col overflow-hidden rounded-3xl border border-white/10 bg-background/95 shadow-2xl backdrop-blur-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-3 py-2 sm:px-4">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{m.media_name ?? "Image"}</p>
+                  <p className="text-xs text-muted-foreground">Responsive, zoomable preview</p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setZoom((value) => Math.max(1, Number((value - 0.25).toFixed(2))))}>
+                    <ZoomOut className="size-4" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setZoom((value) => Math.min(3, Number((value + 0.25).toFixed(2))))}>
+                    <ZoomIn className="size-4" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setZoom(1)}>
+                    <RotateCcw className="size-4" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setViewerOpen(false)}>
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div
+                className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-black/5 p-3 sm:p-4"
+                onWheel={(event) => {
+                  event.preventDefault();
+                  setZoom((value) => {
+                    const next = value + (event.deltaY < 0 ? 0.25 : -0.25);
+                    return Math.min(3, Math.max(1, Number(next.toFixed(2))));
+                  });
+                }}
+              >
+                <img
+                  src={url}
+                  alt={m.media_name ?? ""}
+                  className="max-h-[70vh] max-w-[85vw] object-contain transition-transform duration-200"
+                  style={{ transform: `scale(${zoom})` }}
+                />
+              </div>
+            </div>
+          </div>
         )}
-      </div>
+      </>
     );
   }
 
