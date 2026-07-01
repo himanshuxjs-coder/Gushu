@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
-import { Copy, Reply, Smile, Trash2, Check, CheckCheck, Clock, EyeOff, RotateCcw, CreditCard as Edit2, Star, FileText, Play, Pause, Trash, MoveHorizontal as MoreHorizontal, Plus, RefreshCw, Info, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Copy, Reply, Smile, Trash2, Check, CheckCheck, Clock, EyeOff, RotateCcw, CreditCard as Edit2, Star, FileText, Play, Pause, Trash, MoveHorizontal as MoreHorizontal, Plus, RefreshCw, Info, X, ZoomIn, ZoomOut, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { editMessage, saveMessage, unsaveMessage, signedMediaUrl, sendMessage } from "@/lib/messages.functions";
@@ -804,9 +804,14 @@ function MediaBlock({ m, mine }: { m: Message; mine: boolean }) {
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-3 py-2 sm:px-4">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{m.media_name ?? "Image"}</p>
-                  <p className="text-xs text-muted-foreground">Responsive, zoomable preview</p>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => setViewerOpen(false)}>
+                    <ArrowLeft className="size-4" />
+                  </Button>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{m.media_name ?? "Image"}</p>
+                    <p className="text-xs text-muted-foreground">Responsive, zoomable preview</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setZoom((value) => Math.max(1, Number((value - 0.25).toFixed(2))))}>
