@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
@@ -792,7 +793,7 @@ function MediaBlock({ m, mine }: { m: Message; mine: boolean }) {
           )}
         </div>
 
-        {viewerOpen && url && (
+        {viewerOpen && url && typeof document !== "undefined" && createPortal(
           <div
             className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 px-2 py-3 backdrop-blur-sm sm:px-4"
             role="dialog"
@@ -836,7 +837,8 @@ function MediaBlock({ m, mine }: { m: Message; mine: boolean }) {
                 />
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </>
     );
