@@ -115,13 +115,20 @@ export function Composer({
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }, []);
 
+  const formatScheduleTimeForInput = useCallback((scheduledFor: string) => {
+    const date = new Date(scheduledFor);
+    if (Number.isNaN(date.getTime())) return defaultScheduleTime();
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }, [defaultScheduleTime]);
+
   const openSchedule = useCallback((message = text, item: ScheduledMessage | null = null) => {
     setEditingSchedule(item);
     setScheduleContent(item?.content ?? message);
-    setScheduleTime(item ? item.scheduled_for.slice(0, 16) : defaultScheduleTime());
+    setScheduleTime(item ? formatScheduleTimeForInput(item.scheduled_for) : defaultScheduleTime());
     setScheduleOpen(true);
     setScheduleListOpen(true);
-  }, [defaultScheduleTime, text]);
+  }, [defaultScheduleTime, formatScheduleTimeForInput, text]);
 
   const closeSchedule = useCallback(() => {
     setScheduleOpen(false);

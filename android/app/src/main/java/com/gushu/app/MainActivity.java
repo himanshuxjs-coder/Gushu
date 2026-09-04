@@ -1,6 +1,8 @@
 package com.gushu.app;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -10,15 +12,22 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.PermissionRequest;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends BridgeActivity {
 
@@ -31,6 +40,8 @@ public class MainActivity extends BridgeActivity {
     private boolean isPageLoaded = false;
     private static final int LOAD_TIMEOUT_MS = 15000;
     private long lastReloadTime = 0;
+    private static final int PERMISSIONS_REQUEST_CODE = 123;
+    private PermissionRequest pendingPermissionRequest;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,6 +77,9 @@ public class MainActivity extends BridgeActivity {
 
         // 6. Start Startup Timeout Protection
         startTimeoutTimer();
+
+        // 7. Request permissions on startup
+        checkAndRequestStartupPermissions();
     }
 
     private void setupWebView() {
@@ -101,6 +115,70 @@ public class MainActivity extends BridgeActivity {
                 handler.cancel();
             }
         });
+
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                pendingPermissionRequest = request;
+                String[] resources = request.getResources();
+                List<String> permissionsNeeded = new ArrayList<>();
+
+                for (String resource : resources) {
+                    if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
+                        permissionsNeeded.add(Manifest.permission.CAMERA);
+                    } else if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                        permissionsNeeded.add(Manifest.permission.RECORD_AUDIO);
+                    }
+                }
+
+                if (!permissionsNeeded.isEmpty()) {
+                    ActivityCompat.requestPermissions(MainActivity.this,
+                            permissionsNeeded.toArray(new String[0]), PERMISSIONS_REQUEST_CODE);
+                } else {
+                    request.grant(resources);
+                }
+            }
+        });
+    }
+
+    private void checkAndRequestStartupPermissions() {
+        List<String> permissionsNeeded = new ArrayList<>();
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            permissionsNeeded.add(Manifest.permission.CAMERA);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            permissionsNeeded.add(Manifest.permission.RECORD_AUDIO);
+        }
+
+        if (!permissionsNeeded.isEmpty()) {
+            ActivityCompat.requestPermissions(this, permissionsNeeded.toArray(new String[0]), PERMISSIONS_REQUEST_CODE);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == PERMISSIONS_REQUEST_CODE) {
+            if (pendingPermissionRequest != null) {
+                List<String> grantedResources = new ArrayList<>();
+                for (int i = 0; i < permissions.length; i++) {
+                    if (grantResults[i] == PackageManager.PERMISSION_GRANTED) {
+                        if (Manifest.permission.CAMERA.equals(permissions[i])) {
+                            grantedResources.add(PermissionRequest.RESOURCE_VIDEO_CAPTURE);
+                        } else if (Manifest.permission.RECORD_AUDIO.equals(permissions[i])) {
+                            grantedResources.add(PermissionRequest.RESOURCE_AUDIO_CAPTURE);
+                        }
+                    }
+                }
+                
+                if (!grantedResources.isEmpty()) {
+                    pendingPermissionRequest.grant(grantedResources.toArray(new String[0]));
+                } else {
+                    pendingPermissionRequest.deny();
+                }
+                pendingPermissionRequest = null;
+            }
+        }
     }
 
     private void startTimeoutTimer() {
