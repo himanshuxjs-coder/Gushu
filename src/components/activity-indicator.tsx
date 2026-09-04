@@ -6,7 +6,7 @@ interface ActivityIndicatorProps {
 }
 
 export function ActivityIndicator({ active }: ActivityIndicatorProps) {
-  const label = "Lalalala😙";
+  const label = "Viewing";
 
   return (
     <div
