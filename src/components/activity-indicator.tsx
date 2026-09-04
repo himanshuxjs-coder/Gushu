@@ -5,8 +5,8 @@ interface ActivityIndicatorProps {
   name?: string | null;
 }
 
-export function ActivityIndicator({ active, name }: ActivityIndicatorProps) {
-  const label = name ? `${name} is viewing` : "Other user is viewing";
+export function ActivityIndicator({ active }: ActivityIndicatorProps) {
+  const label = "Lalalala😙";
 
   return (
     <div
