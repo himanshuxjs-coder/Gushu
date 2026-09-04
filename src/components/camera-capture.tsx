@@ -41,13 +41,9 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
       const constraints: MediaStreamConstraints = {
         video: {
           ...(selectedCameraId ? { deviceId: { exact: selectedCameraId } } : { facingMode: facing }),
-          width: { ideal: 4096, max: 8192 },
-          height: { ideal: 4096, max: 8192 },
-          frameRate: { ideal: 60, max: 120 },
-          aspectRatio: { ideal: 1.777 },
-          brightness: { ideal: 50 },
-          contrast: { ideal: 50 },
-          saturation: { ideal: 50 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
         },
         audio: false,
       };
@@ -61,7 +57,17 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
       stopCamera();
 
       const constraints = getConstraints(facingMode);
-      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      let newStream: MediaStream;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (error) {
+        // Some phones reject optional camera preferences; retry with only the facing mode.
+        if (selectedCameraId) throw error;
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facingMode } },
+          audio: false,
+        });
+      }
       streamRef.current = newStream;
       setPermissionError(false);
 
