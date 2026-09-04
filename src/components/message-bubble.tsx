@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
-import { Copy, Reply, Smile, Trash2, Check, CheckCheck, Clock, RotateCcw, CreditCard as Edit2, Box, FileText, Play, Pause, Trash, MoreVertical, Plus, RefreshCw, Info, X, ZoomIn, ZoomOut, ArrowLeft } from "lucide-react";
+import { Copy, Reply, Smile, Trash2, Check, CheckCheck, Clock, RotateCcw, CreditCard as Edit2, Square, FileText, Play, Pause, Trash, MoreVertical, Plus, RefreshCw, Info, X, ZoomIn, ZoomOut, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { editMessage, saveMessage, unsaveMessage, signedMediaUrl, sendMessage } from "@/lib/messages.functions";
@@ -84,9 +84,9 @@ export const MessageBubble = memo(function MessageBubble({
   const [slideOffset, setSlideOffset] = useState(0);
   const [hovering, setHovering] = useState(false);
   const [showInfoDialog, setShowInfoDialog] = useState(false);
-  const [showSavedCube, setShowSavedCube] = useState(savedMessage);
-  const [savedCubeExiting, setSavedCubeExiting] = useState(false);
-  const savedCubeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showSavedSquare, setShowSavedSquare] = useState(savedMessage);
+  const [savedSquareExiting, setSavedSquareExiting] = useState(false);
+  const savedSquareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [localReactions, setLocalReactions] = useState<{ user_id: string; emoji: string }[]>(
     m.reactions ?? []
   );
@@ -158,30 +158,30 @@ export const MessageBubble = memo(function MessageBubble({
   }, [m.reactions]);
 
   useEffect(() => {
-    if (savedCubeTimerRef.current) {
-      clearTimeout(savedCubeTimerRef.current);
-      savedCubeTimerRef.current = null;
+    if (savedSquareTimerRef.current) {
+      clearTimeout(savedSquareTimerRef.current);
+      savedSquareTimerRef.current = null;
     }
 
     if (savedMessage) {
-      setShowSavedCube(true);
-      setSavedCubeExiting(false);
-    } else if (showSavedCube) {
-      setSavedCubeExiting(true);
-      savedCubeTimerRef.current = setTimeout(() => {
-        setShowSavedCube(false);
-        setSavedCubeExiting(false);
-        savedCubeTimerRef.current = null;
+      setShowSavedSquare(true);
+      setSavedSquareExiting(false);
+    } else if (showSavedSquare) {
+      setSavedSquareExiting(true);
+      savedSquareTimerRef.current = setTimeout(() => {
+        setShowSavedSquare(false);
+        setSavedSquareExiting(false);
+        savedSquareTimerRef.current = null;
       }, 420);
     }
 
     return () => {
-      if (savedCubeTimerRef.current) {
-        clearTimeout(savedCubeTimerRef.current);
-        savedCubeTimerRef.current = null;
+      if (savedSquareTimerRef.current) {
+        clearTimeout(savedSquareTimerRef.current);
+        savedSquareTimerRef.current = null;
       }
     };
-  }, [savedMessage, showSavedCube]);
+  }, [savedMessage, showSavedSquare]);
 
   const isDeleted = m.deleted_for_all && m.deleted_for_everyone_at;
   const hasSeenReceipt = Boolean(m.read_at || m.first_read_at || m.viewed_at);
@@ -472,9 +472,9 @@ export const MessageBubble = memo(function MessageBubble({
                   m.content && <p className="whitespace-pre-wrap break-all" style={{ overflowWrap: "anywhere" }}>{m.content}</p>
                 )}
 
-                {showSavedCube && (
-                  <div className={cn("absolute right-2 top-2 text-primary", savedCubeExiting ? "saved-cube-exit" : "saved-cube-enter")}>
-                    <Box className="size-4 stroke-[2.5] saved-cube-glow" />
+                {showSavedSquare && (
+                  <div className={cn("absolute right-2 top-2 text-primary", savedSquareExiting ? "saved-square-exit" : "saved-square-enter")}>
+                    <Square className="size-4 stroke-[2.5] saved-square-glow" />
                   </div>
                 )}
               </div>
@@ -620,12 +620,12 @@ export const MessageBubble = memo(function MessageBubble({
                         }}
                         className="gap-2 px-3 py-2.5"
                       >
-                        <Box className="size-4 text-primary saved-cube-glow" />
+                        <Square className="size-4 text-primary saved-square-glow" />
                         <span>Unsave</span>
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem disabled className="gap-2 px-3 py-2.5 opacity-50 cursor-not-allowed">
-                        <Box className="size-4 text-primary saved-cube-glow" />
+                        <Square className="size-4 text-primary saved-square-glow" />
                         <span>Saved by other user</span>
                       </DropdownMenuItem>
                     )
@@ -645,7 +645,7 @@ export const MessageBubble = memo(function MessageBubble({
                       }}
                       className="gap-2 px-3 py-2.5"
                     >
-                      <Box className="size-4 text-primary saved-cube-glow" />
+                      <Square className="size-4 text-primary saved-square-glow" />
                       <span>Save Chat</span>
                     </DropdownMenuItem>
                   )}
@@ -736,12 +736,12 @@ export const MessageBubble = memo(function MessageBubble({
                         }}
                         className="gap-2 px-3 py-2.5"
                       >
-                          <Box className="size-4 text-primary saved-cube-glow" />
+                          <Square className="size-4 text-primary saved-square-glow" />
                         <span>Unsave</span>
                       </ContextMenuItem>
                     ) : (
                       <ContextMenuItem disabled className="gap-2 px-3 py-2.5 opacity-50 cursor-not-allowed">
-                          <Box className="size-4 text-primary saved-cube-glow" />
+                          <Square className="size-4 text-primary saved-square-glow" />
                         <span>Saved by other user</span>
                       </ContextMenuItem>
                     )
@@ -761,7 +761,7 @@ export const MessageBubble = memo(function MessageBubble({
                       }}
                       className="gap-2 px-3 py-2.5"
                     >
-                        <Box className="size-4 text-primary saved-cube-glow" />
+                        <Square className="size-4 text-primary saved-square-glow" />
                       <span>Save Chat</span>
                     </ContextMenuItem>
                   )}
