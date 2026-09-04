@@ -75,6 +75,7 @@ export function Composer({
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const sendHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
+  const isMobile = useIsMobile();
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const submittingRef = useRef(false);
@@ -133,12 +134,13 @@ export function Composer({
   }, []);
 
   const openSchedule = useCallback((message = text, item: ScheduledMessage | null = null) => {
+    if (isMobile) return;
     setEditingSchedule(item);
     setScheduleContent(item?.content ?? message);
     setScheduleTime(item ? formatScheduleTimeForInput(item.scheduled_for) : defaultScheduleTime());
     setScheduleOpen(true);
     setScheduleListOpen(true);
-  }, [defaultScheduleTime, formatScheduleTimeForInput, text]);
+  }, [defaultScheduleTime, formatScheduleTimeForInput, isMobile, text]);
 
   const closeSchedule = useCallback(() => {
     setScheduleOpen(false);
@@ -189,12 +191,24 @@ export function Composer({
     event.preventDefault();
     longPressTriggeredRef.current = false;
     clearSendHold();
+    if (isMobile) {
+      refocusInput();
+      return;
+    }
     sendHoldTimerRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true;
       openSchedule();
     }, 550);
     refocusInput();
   };
+
+  useEffect(() => {
+    if (isMobile) {
+      clearSendHold();
+      closeSchedule();
+      setScheduleListOpen(false);
+    }
+  }, [closeSchedule, isMobile]);
 
   useEffect(() => {
     void refreshScheduledMessages();
@@ -606,8 +620,6 @@ export function Composer({
     }
   }
 
-  const isMobile = useIsMobile();
-
   const handleTextChange = useCallback(
     (value: string) => {
       const nextValue = value.length > MAX_MESSAGE_LENGTH ? value.slice(0, MAX_MESSAGE_LENGTH) : value;
@@ -676,7 +688,7 @@ export function Composer({
         </div>
       )}
 
-      {scheduledMessages.length > 0 && (
+      {!isMobile && scheduledMessages.length > 0 && (
         <div className="mx-auto mb-2 max-w-4xl px-2 md:px-0">
           <button
             type="button"
@@ -812,7 +824,7 @@ export function Composer({
         )}
       </div>
 
-      <div className={cn("pointer-events-none absolute inset-x-2 bottom-full z-50 mb-2 origin-bottom transition-all duration-300 sm:inset-x-6", scheduleOpen ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-95 opacity-0")}>
+      {!isMobile && <div className={cn("pointer-events-none absolute inset-x-2 bottom-full z-50 mb-2 origin-bottom transition-all duration-300 sm:inset-x-6", scheduleOpen ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-95 opacity-0")}>
         <div className="pointer-events-auto mx-auto max-w-md rounded-2xl border border-primary/25 bg-card/95 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.24),0_0_30px_rgba(99,102,241,0.12)] backdrop-blur-xl">
           <div className="mb-3 flex items-center justify-between">
             <div>
@@ -844,7 +856,7 @@ export function Composer({
             </button>
           </div>
         </div>
-      </div>
+      </div>}
 
       {showVoice && (
         <div className="absolute inset-x-2 bottom-2 z-40 sm:inset-x-6 sm:bottom-6">
