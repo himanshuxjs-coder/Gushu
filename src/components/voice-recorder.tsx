@@ -25,9 +25,23 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
   const audioChunksRef = useRef<Blob[]>([]);
   const restartWithMicrophoneRef = useRef(false);
   const selectedMicrophoneRef = useRef("");
+  const activeStreamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isDesktop = typeof window !== "undefined" && !window.matchMedia("(max-width: 768px)").matches;
+
+  const stopMicrophone = () => {
+    const activeStream = activeStreamRef.current;
+    if (activeStream) {
+      activeStream.getTracks().forEach((track) => track.stop());
+      activeStreamRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+  };
 
   const loadMicrophones = async (activeDeviceId?: string) => {
     if (!isDesktop || !navigator.mediaDevices?.enumerateDevices) return;
@@ -45,6 +59,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      stopMicrophone();
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
@@ -235,6 +250,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
             </span>
           </>
         )}
+              activeStreamRef.current = stream;
       </div>
 
       {isDesktop && microphones.length > 0 && (
@@ -250,6 +266,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
               <option key={device.deviceId} value={device.deviceId} className="bg-neutral-950 text-white">
                 {device.label || `Microphone ${index + 1}`}
               </option>
+                if (activeStreamRef.current === stream) activeStreamRef.current = null;
             ))}
           </select>
         </label>
@@ -311,6 +328,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
               <Send className="size-5" />
             )}
           </Button>
+            stopMicrophone();
         )}
       </div>
     </div>

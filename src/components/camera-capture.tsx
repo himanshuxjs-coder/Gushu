@@ -24,6 +24,17 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const flashRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopCamera = useCallback(() => {
+    const activeStream = streamRef.current;
+    if (activeStream) {
+      activeStream.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setStream(null);
+  }, []);
 
   const getConstraints = useCallback(
     (facing: "user" | "environment") => {
@@ -47,12 +58,11 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
 
   const startCamera = useCallback(async () => {
     try {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      stopCamera();
 
       const constraints = getConstraints(facingMode);
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = newStream;
       setPermissionError(false);
 
       if (isDesktop && navigator.mediaDevices.enumerateDevices) {
@@ -84,18 +94,16 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
       if (isDesktop) setPermissionError(true);
       else onClose();
     }
-  }, [facingMode, getConstraints, onClose, selectedCameraId, stream]);
+  }, [facingMode, getConstraints, onClose, selectedCameraId, stopCamera]);
 
   useEffect(() => {
     startCamera();
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      stopCamera();
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facingMode, selectedCameraId]);
+  }, [facingMode, selectedCameraId, stopCamera]);
 
   const toggleTorch = async () => {
     const videoTrack = stream?.getVideoTracks()[0];
@@ -146,7 +154,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
         setCapturedBlob(blob);
         setPreviewUrl(URL.createObjectURL(blob));
         if (stream) {
-          stream.getTracks().forEach((track) => track.stop());
+          stopCamera();
           setStream(null);
         }
       },
@@ -185,7 +193,10 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
       <div className="relative z-20 flex items-center justify-between border-b border-white/10 bg-black/30 px-4 py-3 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <button
-            onClick={onClose}
+            onClick={() => {
+              stopCamera();
+              onClose();
+            }}
             className="grid size-9 place-items-center rounded-xl border border-white/10 bg-white/10 text-white/80 transition-all hover:border-white/25 hover:bg-white/20 hover:text-white active:scale-95"
             aria-label="Close camera"
           >
