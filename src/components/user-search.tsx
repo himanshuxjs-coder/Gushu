@@ -63,15 +63,13 @@ export function UserSearch() {
       setLoading(true);
       setCodeMatch(null);
       try {
-        const r = await search({ data: { q: q.trim() } });
+        const term = q.trim();
+        const [r, hidden] = await Promise.all([
+          search({ data: { q: term } }),
+          term.length >= 4 ? findHidden({ data: { code: term } }) : Promise.resolve(null),
+        ]);
         setResults(r);
-        // Always check for hidden chat if looks like a code (4+ chars)
-        if (q.trim().length >= 4) {
-          const hidden = await findHidden({ data: { code: q.trim() } });
-          if (hidden?.found && hidden.conversationId) {
-            setCodeMatch({ conversationId: hidden.conversationId });
-          }
-        }
+        if (hidden?.found && hidden.conversationId) setCodeMatch({ conversationId: hidden.conversationId });
       } catch (e: any) {
         // ignore
       } finally {

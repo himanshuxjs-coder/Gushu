@@ -10,13 +10,21 @@ export const searchUsers = createServerFn({ method: "POST" })
     const term = data.q.toLowerCase().replace(/[^a-z0-9_]/g, "");
     if (!term) return [];
     
-    // Fetch hidden user IDs first to exclude them
-    const { data: hiddenSettings } = await supabase
-      .from("conversation_settings")
-      .select("conversation_id")
-      .eq("user_id", userId)
-      .eq("is_hidden", true)
-      .not("secret_code_hash", "is", null);
+    const [{ data: hiddenSettings }, { data: profiles, error: searchError }] = await Promise.all([
+      supabase
+        .from("conversation_settings")
+        .select("conversation_id")
+        .eq("user_id", userId)
+        .eq("is_hidden", true)
+        .not("secret_code_hash", "is", null),
+      supabase
+        .from("profiles")
+        .select("id, username, display_name, avatar_url, verified")
+        .ilike("username", `%${term}%`)
+        .neq("id", userId)
+        .limit(25),
+    ]);
+    if (searchError) throw new Error(searchError.message);
 
     let excludeUserIds: string[] = [];
     if (hiddenSettings && hiddenSettings.length > 0) {
@@ -31,19 +39,8 @@ export const searchUsers = createServerFn({ method: "POST" })
       }
     }
 
-    let query = supabase
-      .from("profiles")
-      .select("id, username, display_name, avatar_url, verified")
-      .ilike("username", `%${term}%`)
-      .neq("id", userId);
-
-    if (excludeUserIds.length > 0) {
-      query = query.not("id", "in", `(${excludeUserIds.join(",")})`);
-    }
-
-    const { data: profiles, error: searchError } = await query.limit(10);
-    if (searchError) throw new Error(searchError.message);
-    return profiles ?? [];
+    const excluded = new Set(excludeUserIds);
+    return (profiles ?? []).filter((profile) => !excluded.has(profile.id)).slice(0, 10);
   });
 
 export const getProfileByUsername = createServerFn({ method: "POST" })

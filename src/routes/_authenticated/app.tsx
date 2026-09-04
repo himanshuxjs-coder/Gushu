@@ -126,10 +126,10 @@ function AppShell() {
     queryFn: () => listFn({ data: undefined as any }),
     enabled: meQuery.isSuccess && !!me,
     retry: 2,
-    staleTime: 3000,
+    staleTime: 15000,
     gcTime: 300000,
     refetchOnWindowFocus: true,
-    refetchInterval: 2500,
+    refetchInterval: 15000,
     refetchIntervalInBackground: false,
   });
 
