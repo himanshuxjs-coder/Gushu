@@ -40,8 +40,18 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
     (facing: "user" | "environment") => {
       const constraints: MediaStreamConstraints = {
         video: selectedCameraId
-          ? { deviceId: { exact: selectedCameraId } }
-          : { facingMode: { ideal: facing } },
+          ? {
+              deviceId: { exact: selectedCameraId },
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
+              frameRate: { ideal: 30 },
+            }
+          : {
+              facingMode: { ideal: facing },
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
+              frameRate: { ideal: 30 },
+            },
         audio: false,
       };
       return constraints;
@@ -82,6 +92,13 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
 
       const videoTrack = newStream.getVideoTracks()[0];
       const capabilities = videoTrack.getCapabilities?.() as any;
+      const qualityConstraints: Record<string, unknown> = {};
+      if (capabilities?.focusMode?.includes?.("continuous")) qualityConstraints.focusMode = "continuous";
+      if (capabilities?.exposureMode?.includes?.("continuous")) qualityConstraints.exposureMode = "continuous";
+      if (capabilities?.whiteBalanceMode?.includes?.("continuous")) qualityConstraints.whiteBalanceMode = "continuous";
+      if (Object.keys(qualityConstraints).length > 0) {
+        void videoTrack.applyConstraints({ advanced: [qualityConstraints] } as MediaTrackConstraints).catch(() => {});
+      }
       if (capabilities?.torch) {
         setTorchAvailable(true);
       } else {
@@ -132,10 +149,25 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
     });
   };
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
+
+    const videoTrack = streamRef.current?.getVideoTracks()[0];
+    const ImageCaptureConstructor = (globalThis as typeof globalThis & { ImageCapture?: new (track: MediaStreamTrack) => { takePhoto: () => Promise<Blob> } }).ImageCapture;
+    if (videoTrack && ImageCaptureConstructor) {
+      try {
+        const photoBlob = await new ImageCaptureConstructor(videoTrack).takePhoto();
+        doFlash();
+        setCapturedBlob(photoBlob);
+        setPreviewUrl(URL.createObjectURL(photoBlob));
+        stopCamera();
+        return;
+      } catch {
+        // Fall back to the live video frame for browsers without still-photo support.
+      }
+    }
 
     canvas.width = video.videoWidth || 1920;
     canvas.height = video.videoHeight || 1080;
