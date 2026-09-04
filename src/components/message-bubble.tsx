@@ -78,12 +78,13 @@ export const MessageBubble = memo(function MessageBubble({
   meId: string;
   theme?: string;
 }) {
+  const savedMessage = Boolean(m.is_saved || m.saved_by_me);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.content ?? "");
   const [slideOffset, setSlideOffset] = useState(0);
   const [hovering, setHovering] = useState(false);
   const [showInfoDialog, setShowInfoDialog] = useState(false);
-  const [showSavedCube, setShowSavedCube] = useState(Boolean(m.is_saved));
+  const [showSavedCube, setShowSavedCube] = useState(savedMessage);
   const [savedCubeExiting, setSavedCubeExiting] = useState(false);
   const savedCubeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [localReactions, setLocalReactions] = useState<{ user_id: string; emoji: string }[]>(
@@ -162,7 +163,7 @@ export const MessageBubble = memo(function MessageBubble({
       savedCubeTimerRef.current = null;
     }
 
-    if (m.is_saved) {
+    if (savedMessage) {
       setShowSavedCube(true);
       setSavedCubeExiting(false);
     } else if (showSavedCube) {
@@ -180,7 +181,7 @@ export const MessageBubble = memo(function MessageBubble({
         savedCubeTimerRef.current = null;
       }
     };
-  }, [m.is_saved, showSavedCube]);
+  }, [savedMessage, showSavedCube]);
 
   const isDeleted = m.deleted_for_all && m.deleted_for_everyone_at;
   const hasSeenReceipt = Boolean(m.read_at || m.first_read_at || m.viewed_at);
@@ -392,7 +393,7 @@ export const MessageBubble = memo(function MessageBubble({
                     bubbleBg, ringColor,
                     highlighted && "ring-2 ring-amber-400/60 bg-amber-200/10 dark:bg-amber-500/10",
                     mine ? "rounded-tr-md" : "rounded-tl-md",
-                    m.is_saved && "rounded-md pr-8 ring-2 ring-primary/60 shadow-[0_0_18px_rgba(139,92,246,0.42),0_0_28px_rgba(59,130,246,0.18)] saved-message-highlight",
+                    savedMessage && "rounded-md pr-8 ring-2 ring-primary/60 shadow-[0_0_18px_rgba(139,92,246,0.42),0_0_28px_rgba(59,130,246,0.18)] saved-message-highlight",
                     m.is_optimistic && "opacity-70 grayscale-[0.3]"
                   )}
                 style={{ transform: `translateX(${slideOffset}px)`, maxWidth: "100%", overflowWrap: "anywhere" }}
@@ -473,7 +474,7 @@ export const MessageBubble = memo(function MessageBubble({
 
                 {showSavedCube && (
                   <div className={cn("absolute right-2 top-2 text-primary", savedCubeExiting ? "saved-cube-exit" : "saved-cube-enter")}>
-                    <Box className="size-3" />
+                    <Box className="size-4 stroke-[2.5] saved-cube-glow" />
                   </div>
                 )}
               </div>
@@ -619,12 +620,12 @@ export const MessageBubble = memo(function MessageBubble({
                         }}
                         className="gap-2 px-3 py-2.5"
                       >
-                        <Box className="size-4 text-primary" />
+                        <Box className="size-4 text-primary saved-cube-glow" />
                         <span>Unsave</span>
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem disabled className="gap-2 px-3 py-2.5 opacity-50 cursor-not-allowed">
-                        <Box className="size-4 text-primary" />
+                        <Box className="size-4 text-primary saved-cube-glow" />
                         <span>Saved by other user</span>
                       </DropdownMenuItem>
                     )
@@ -644,7 +645,7 @@ export const MessageBubble = memo(function MessageBubble({
                       }}
                       className="gap-2 px-3 py-2.5"
                     >
-                      <Box className="size-4" />
+                      <Box className="size-4 text-primary saved-cube-glow" />
                       <span>Save Chat</span>
                     </DropdownMenuItem>
                   )}
@@ -735,12 +736,12 @@ export const MessageBubble = memo(function MessageBubble({
                         }}
                         className="gap-2 px-3 py-2.5"
                       >
-                          <Box className="size-4 text-primary" />
+                          <Box className="size-4 text-primary saved-cube-glow" />
                         <span>Unsave</span>
                       </ContextMenuItem>
                     ) : (
                       <ContextMenuItem disabled className="gap-2 px-3 py-2.5 opacity-50 cursor-not-allowed">
-                          <Box className="size-4 text-primary" />
+                          <Box className="size-4 text-primary saved-cube-glow" />
                         <span>Saved by other user</span>
                       </ContextMenuItem>
                     )
@@ -760,7 +761,7 @@ export const MessageBubble = memo(function MessageBubble({
                       }}
                       className="gap-2 px-3 py-2.5"
                     >
-                        <Box className="size-4" />
+                        <Box className="size-4 text-primary saved-cube-glow" />
                       <span>Save Chat</span>
                     </ContextMenuItem>
                   )}
