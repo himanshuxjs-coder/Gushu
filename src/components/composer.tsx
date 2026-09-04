@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
-import { Paperclip, Send, Smile, Loader as Loader2, X, Mic, Camera } from "lucide-react";
+import { Paperclip, Send, Smile, Loader as Loader2, X, Mic, Camera, CalendarClock, ChevronUp, Pencil, Trash2 } from "lucide-react";
 import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,8 +17,16 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useDraft } from "@/hooks/use-draft";
 import { subscribeWithReconnect } from "@/lib/realtime-utils";
+import { cancelScheduledMessage, createScheduledMessage, listScheduledMessages, updateScheduledMessage } from "@/lib/scheduling.functions";
 
 const MAX_MESSAGE_LENGTH = 4000;
+
+type ScheduledMessage = {
+  id: string;
+  content: string;
+  scheduled_for: string;
+  status: "pending" | "sent" | "cancelled";
+};
 
 function kindForMime(mime: string): "image" | "video" | "file" {
   if (mime.startsWith("image/")) return "image";
@@ -58,6 +66,15 @@ export function Composer({
   const [isFocused, setIsFocused] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleListOpen, setScheduleListOpen] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<ScheduledMessage | null>(null);
+  const [scheduleContent, setScheduleContent] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("");
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const sendHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const submittingRef = useRef(false);
@@ -76,7 +93,104 @@ export function Composer({
   const createUpload = useServerFn(createMediaUpload);
   const setTypingStatus = useServerFn(setTyping);
   const clearTypingStatus = useServerFn(clearTyping);
+  const listScheduled = useServerFn(listScheduledMessages);
+  const createScheduled = useServerFn(createScheduledMessage);
+  const updateScheduled = useServerFn(updateScheduledMessage);
+  const cancelScheduled = useServerFn(cancelScheduledMessage);
   const queryClient = useQueryClient();
+
+  const refreshScheduledMessages = useCallback(async () => {
+    try {
+      const rows = await listScheduled({ data: { conversationId } });
+      setScheduledMessages(rows as ScheduledMessage[]);
+    } catch {
+      setScheduledMessages([]);
+    }
+  }, [conversationId, listScheduled]);
+
+  const defaultScheduleTime = useCallback(() => {
+    const date = new Date(Date.now() + 60 * 60 * 1000);
+    date.setSeconds(0, 0);
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }, []);
+
+  const openSchedule = useCallback((message = text, item: ScheduledMessage | null = null) => {
+    setEditingSchedule(item);
+    setScheduleContent(item?.content ?? message);
+    setScheduleTime(item ? item.scheduled_for.slice(0, 16) : defaultScheduleTime());
+    setScheduleOpen(true);
+    setScheduleListOpen(true);
+  }, [defaultScheduleTime, text]);
+
+  const closeSchedule = useCallback(() => {
+    setScheduleOpen(false);
+    setEditingSchedule(null);
+  }, []);
+
+  const submitSchedule = async () => {
+    if (!scheduleContent.trim() || !scheduleTime || scheduleBusy) return;
+    setScheduleBusy(true);
+    try {
+      const scheduledFor = new Date(scheduleTime).toISOString();
+      if (editingSchedule) {
+        await updateScheduled({ data: { id: editingSchedule.id, content: scheduleContent, scheduledFor } });
+        toast.success("Scheduled message updated");
+      } else {
+        await createScheduled({ data: { conversationId, content: scheduleContent, scheduledFor } });
+        setText("");
+        clearDraftBroadcast();
+        toast.success("Message scheduled");
+      }
+      await refreshScheduledMessages();
+      closeSchedule();
+    } catch (error: any) {
+      toast.error(error?.message ?? "Could not schedule message");
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
+
+  const handleCancelScheduled = async (id: string) => {
+    try {
+      await cancelScheduled({ data: { id } });
+      setScheduledMessages((current) => current.filter((item) => item.id !== id));
+      toast.success("Scheduled message cancelled");
+    } catch (error: any) {
+      toast.error(error?.message ?? "Could not cancel scheduled message");
+    }
+  };
+
+  const clearSendHold = () => {
+    if (sendHoldTimerRef.current) {
+      clearTimeout(sendHoldTimerRef.current);
+      sendHoldTimerRef.current = null;
+    }
+  };
+
+  const handleSendPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    longPressTriggeredRef.current = false;
+    clearSendHold();
+    sendHoldTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      openSchedule();
+    }, 550);
+    refocusInput();
+  };
+
+  useEffect(() => {
+    void refreshScheduledMessages();
+    const scheduleChannel = supabase
+      .channel(`scheduled:${conversationId}:${meId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "scheduled_messages", filter: `sender_id=eq.${meId}` }, () => {
+        void refreshScheduledMessages();
+      });
+    subscribeWithReconnect(scheduleChannel);
+    return () => {
+      void supabase.removeChannel(scheduleChannel);
+    };
+  }, [conversationId, meId, refreshScheduledMessages]);
 
   useEffect(() => {
     return () => {
@@ -545,6 +659,43 @@ export function Composer({
         </div>
       )}
 
+      {scheduledMessages.length > 0 && (
+        <div className="mx-auto mb-2 max-w-4xl px-2 md:px-0">
+          <button
+            type="button"
+            onClick={() => setScheduleListOpen((open) => !open)}
+            className="group flex w-full items-center justify-between rounded-xl border border-primary/20 bg-card/80 px-3 py-2 text-left shadow-sm backdrop-blur transition-all duration-300 hover:border-primary/45 hover:shadow-[0_0_24px_rgba(99,102,241,0.12)]"
+            aria-expanded={scheduleListOpen}
+          >
+            <span className="flex items-center gap-2 text-xs font-medium text-foreground">
+              <CalendarClock className="size-4 text-primary transition-transform duration-300 group-hover:-rotate-12" />
+              {scheduledMessages.length} scheduled {scheduledMessages.length === 1 ? "message" : "messages"}
+            </span>
+            <ChevronUp className={cn("size-4 text-muted-foreground transition-transform duration-300", !scheduleListOpen && "rotate-180")} />
+          </button>
+          <div className={cn("grid transition-[grid-template-rows,opacity] duration-300", scheduleListOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")}>
+            <div className="min-h-0 overflow-hidden">
+              <div className="mt-2 space-y-2 rounded-xl border border-border/70 bg-card/90 p-2 shadow-lg backdrop-blur-xl">
+                {scheduledMessages.map((item) => (
+                  <div key={item.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs text-foreground">{item.content}</p>
+                      <p className="mt-0.5 text-[10px] text-primary">{new Date(item.scheduled_for).toLocaleString()}</p>
+                    </div>
+                    <button type="button" onClick={() => openSchedule(item.content, item)} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary" aria-label="Edit scheduled message">
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button type="button" onClick={() => void handleCancelScheduled(item.id)} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive" aria-label="Cancel scheduled message">
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="relative mx-auto flex max-w-4xl items-end gap-1.5 rounded-2xl bg-card/80 p-1.5 ring-1 ring-border backdrop-blur sm:gap-2 sm:p-2">
         <Button
           type="button"
@@ -620,15 +771,21 @@ export function Composer({
         {text.trim() && (
           <Button
             type="button"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              refocusInput();
+            onPointerDown={handleSendPointerDown}
+            onPointerUp={clearSendHold}
+            onPointerLeave={clearSendHold}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              clearSendHold();
+              openSchedule();
             }}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              refocusInput();
+            onClick={() => {
+              if (longPressTriggeredRef.current) {
+                longPressTriggeredRef.current = false;
+                return;
+              }
+              void submit();
             }}
-            onClick={submit}
             disabled={busy || !text.trim()}
             className={cn("h-8 rounded-xl px-3 sm:h-10 sm:px-4 sm:gap-1.5")}
           >
@@ -636,6 +793,40 @@ export function Composer({
             <span className="hidden text-[11px] font-bold uppercase tracking-wider sm:inline-block">Send</span>
           </Button>
         )}
+      </div>
+
+      <div className={cn("pointer-events-none absolute inset-x-2 bottom-full z-50 mb-2 origin-bottom transition-all duration-300 sm:inset-x-6", scheduleOpen ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-95 opacity-0")}>
+        <div className="pointer-events-auto mx-auto max-w-md rounded-2xl border border-primary/25 bg-card/95 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.24),0_0_30px_rgba(99,102,241,0.12)] backdrop-blur-xl">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="flex items-center gap-2 text-sm font-semibold text-foreground"><CalendarClock className="size-4 text-primary" /> {editingSchedule ? "Edit schedule" : "Schedule message"}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Only you can see pending scheduled messages.</p>
+            </div>
+            <button type="button" onClick={closeSchedule} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close scheduling">
+              <X className="size-4" />
+            </button>
+          </div>
+          <textarea
+            value={scheduleContent}
+            onChange={(event) => setScheduleContent(event.target.value.slice(0, MAX_MESSAGE_LENGTH))}
+            rows={2}
+            className="w-full resize-none rounded-xl border border-border bg-background/70 px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+            placeholder="Message to schedule"
+          />
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              type="datetime-local"
+              value={scheduleTime}
+              min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+              onChange={(event) => setScheduleTime(event.target.value)}
+              className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              aria-label="Schedule time"
+            />
+            <button type="button" onClick={() => void submitSchedule()} disabled={scheduleBusy || !scheduleContent.trim() || !scheduleTime} className="rounded-xl brand-gradient px-3 py-2 text-xs font-semibold text-white shadow-[0_0_18px_rgba(99,102,241,0.28)] transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50">
+              {scheduleBusy ? <Loader2 className="size-4 animate-spin" /> : editingSchedule ? "Update" : "Schedule"}
+            </button>
+          </div>
+        </div>
       </div>
 
       {showVoice && (
