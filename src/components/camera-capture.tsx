@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { RefreshCcw, X, Send, Trash2, Loader as Loader2, Zap, ZapOff } from "lucide-react";
+import { RefreshCcw, X, Send, Trash2, Loader as Loader2, Zap, ZapOff, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
@@ -16,6 +16,10 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
   const [busy, setBusy] = useState(false);
   const [flashOn, setFlashOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState("");
+  const [permissionError, setPermissionError] = useState(false);
+  const isDesktop = typeof window !== "undefined" && !window.matchMedia("(max-width: 768px)").matches;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -25,7 +29,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
     (facing: "user" | "environment") => {
       const constraints: MediaStreamConstraints = {
         video: {
-          facingMode: facing,
+          ...(selectedCameraId ? { deviceId: { exact: selectedCameraId } } : { facingMode: facing }),
           width: { ideal: 4096, max: 8192 },
           height: { ideal: 4096, max: 8192 },
           frameRate: { ideal: 60, max: 120 },
@@ -49,6 +53,14 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
 
       const constraints = getConstraints(facingMode);
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      setPermissionError(false);
+
+      if (isDesktop && navigator.mediaDevices.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const available = devices.filter((device) => device.kind === "videoinput");
+        setCameras(available);
+        if (!selectedCameraId && available[0]) setSelectedCameraId(available[0].deviceId);
+      }
 
       const videoTrack = newStream.getVideoTracks()[0];
       const capabilities = videoTrack.getCapabilities?.() as any;
@@ -64,9 +76,10 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
       }
     } catch (err: any) {
       toast.error(err?.message || "Camera access denied or not available");
-      onClose();
+      if (isDesktop) setPermissionError(true);
+      else onClose();
     }
-  }, [facingMode, getConstraints, onClose, stream]);
+  }, [facingMode, getConstraints, onClose, selectedCameraId, stream]);
 
   useEffect(() => {
     startCamera();
@@ -77,7 +90,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facingMode]);
+  }, [facingMode, selectedCameraId]);
 
   const toggleTorch = async () => {
     const videoTrack = stream?.getVideoTracks()[0];
@@ -178,8 +191,28 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
             <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">Studio capture</p>
           </div>
         </div>
-        <div className="rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
-          {facingMode === "user" ? "Front" : "Rear"}
+        <div className="flex items-center gap-2">
+          {isDesktop && cameras.length > 0 ? (
+            <label className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/10 px-2.5 py-2 text-white/70 backdrop-blur-xl">
+              <Settings2 className="size-3.5" />
+              <select
+                value={selectedCameraId}
+                onChange={(event) => setSelectedCameraId(event.target.value)}
+                className="max-w-32 bg-transparent text-[10px] text-white outline-none"
+                aria-label="Select camera"
+              >
+                {cameras.map((device, index) => (
+                  <option key={device.deviceId} value={device.deviceId} className="bg-neutral-900 text-white">
+                    {device.label || `Camera ${index + 1}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div className="rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
+              {facingMode === "user" ? "Front" : "Rear"}
+            </div>
+          )}
         </div>
       </div>
 
@@ -196,6 +229,21 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
                 transform: facingMode === "user" ? "scaleX(-1)" : "none",
               }}
             />
+            {permissionError && isDesktop && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-6 text-center backdrop-blur-md">
+                <div className="max-w-xs rounded-2xl border border-white/10 bg-black/45 p-5 shadow-2xl">
+                  <p className="text-sm font-semibold">Camera access is required</p>
+                  <p className="mt-1 text-xs text-white/60">Allow camera access in your browser, then try again.</p>
+                  <button
+                    type="button"
+                    onClick={() => void startCamera()}
+                    className="mt-4 rounded-xl brand-gradient px-4 py-2 text-xs font-semibold text-white shadow-[0_0_20px_rgba(99,102,241,0.35)]"
+                  >
+                    Allow camera access
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.52)_100%)]" />
             <div className="pointer-events-none absolute inset-8 z-10 rounded-[2rem] border border-white/15 sm:inset-14">
               <span className="absolute -left-px -top-px h-10 w-10 rounded-tl-2xl border-l-2 border-t-2 border-white/80" />
