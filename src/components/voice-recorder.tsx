@@ -29,14 +29,16 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isDesktop = typeof window !== "undefined" && !window.matchMedia("(max-width: 768px)").matches;
 
-  const loadMicrophones = async () => {
+  const loadMicrophones = async (activeDeviceId?: string) => {
     if (!isDesktop || !navigator.mediaDevices?.enumerateDevices) return;
     const devices = await navigator.mediaDevices.enumerateDevices();
     const available = devices.filter((device) => device.kind === "audioinput");
     setMicrophones(available);
+    const activeMicrophone = activeDeviceId && available.find((device) => device.deviceId === activeDeviceId);
     if (!selectedMicrophoneId && available[0]) {
-      selectedMicrophoneRef.current = available[0].deviceId;
-      setSelectedMicrophoneId(available[0].deviceId);
+      const deviceId = activeMicrophone?.deviceId ?? available[0].deviceId;
+      selectedMicrophoneRef.current = deviceId;
+      setSelectedMicrophoneId(deviceId);
     }
   };
 
@@ -53,7 +55,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: selectedMicrophoneRef.current ? { deviceId: { exact: selectedMicrophoneRef.current } } : true,
       });
-      await loadMicrophones();
+      await loadMicrophones(stream.getAudioTracks()[0]?.getSettings().deviceId);
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -236,16 +238,16 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
       </div>
 
       {isDesktop && microphones.length > 0 && (
-        <label className="flex shrink-0 items-center gap-1.5 rounded-xl border border-border/70 bg-muted/40 px-2 py-2 text-muted-foreground">
+        <label className="flex shrink-0 items-center gap-1.5 rounded-xl border border-border/70 bg-muted/60 px-2.5 py-2 text-muted-foreground shadow-sm transition-colors focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/20">
           <Settings2 className="size-3.5" />
           <select
             value={selectedMicrophoneId}
             onChange={(event) => changeMicrophone(event.target.value)}
-            className="max-w-36 bg-transparent text-[11px] text-foreground outline-none"
+            className="max-w-40 cursor-pointer appearance-none bg-background px-1.5 py-1 text-[11px] font-medium text-foreground outline-none focus-visible:ring-1 focus-visible:ring-primary"
             aria-label="Select microphone"
           >
             {microphones.map((device, index) => (
-              <option key={device.deviceId} value={device.deviceId}>
+              <option key={device.deviceId} value={device.deviceId} className="bg-neutral-950 text-white">
                 {device.label || `Microphone ${index + 1}`}
               </option>
             ))}

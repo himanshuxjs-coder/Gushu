@@ -42,7 +42,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
       };
       return constraints;
     },
-    [],
+    [selectedCameraId],
   );
 
   const startCamera = useCallback(async () => {
@@ -59,7 +59,12 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const available = devices.filter((device) => device.kind === "videoinput");
         setCameras(available);
-        if (!selectedCameraId && available[0]) setSelectedCameraId(available[0].deviceId);
+        if (!selectedCameraId && available[0]) {
+          const activeDeviceId = newStream.getVideoTracks()[0]?.getSettings().deviceId;
+          setSelectedCameraId(activeDeviceId && available.some((device) => device.deviceId === activeDeviceId)
+            ? activeDeviceId
+            : available[0].deviceId);
+        }
       }
 
       const videoTrack = newStream.getVideoTracks()[0];
@@ -198,7 +203,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
               <select
                 value={selectedCameraId}
                 onChange={(event) => setSelectedCameraId(event.target.value)}
-                className="max-w-32 bg-transparent text-[10px] text-white outline-none"
+                className="max-w-36 cursor-pointer appearance-none bg-neutral-950 px-1 text-[11px] font-medium text-white outline-none focus-visible:ring-1 focus-visible:ring-primary"
                 aria-label="Select camera"
               >
                 {cameras.map((device, index) => (
