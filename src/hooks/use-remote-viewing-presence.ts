@@ -4,6 +4,7 @@ import { useChatVisibility } from "@/hooks/use-chat-visibility";
 
 const RECONNECT_DELAYS = [500, 1000, 2000, 4000, 8000, 16000];
 const FALLBACK_POLL_MS = 3000;
+const PRESENCE_HEARTBEAT_MS = 10000;
 
 /**
  * Two-user remote viewing presence system.
@@ -37,6 +38,7 @@ export function useRemoteViewingPresence(
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rawViewingRef = useRef(false);
   const fallbackPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const initialSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   viewingRef.current = isLocallyViewing;
@@ -78,9 +80,9 @@ export function useRemoteViewingPresence(
     if (!channel || !subscribedRef.current) return;
 
     if (viewingRef.current) {
-      void channel.track({ user_id: meId, viewing: true });
+      void channel.track({ user_id: meId, viewing: true }).catch(() => {});
     } else {
-      void channel.untrack();
+      void channel.untrack().catch(() => {});
     }
   }, [meId]);
 
@@ -111,6 +113,11 @@ export function useRemoteViewingPresence(
     if (fallbackPollRef.current) {
       clearInterval(fallbackPollRef.current);
       fallbackPollRef.current = null;
+    }
+
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
     }
 
     if (initialSyncTimerRef.current) {
@@ -201,6 +208,13 @@ export function useRemoteViewingPresence(
       }
     }, FALLBACK_POLL_MS);
 
+    // Republish periodically so missed presence events recover without a reload.
+    heartbeatRef.current = setInterval(() => {
+      if (!subscribedRef.current) return;
+      publishLocalPresence();
+      syncRemotePresence();
+    }, PRESENCE_HEARTBEAT_MS);
+
     return () => {
       subscribedRef.current = false;
       if (reconnectTimerRef.current) {
@@ -214,6 +228,10 @@ export function useRemoteViewingPresence(
       if (fallbackPollRef.current) {
         clearInterval(fallbackPollRef.current);
         fallbackPollRef.current = null;
+      }
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
       }
       if (initialSyncTimerRef.current) {
         clearTimeout(initialSyncTimerRef.current);
@@ -269,12 +287,21 @@ export function useRemoteViewingPresence(
       syncRemotePresence();
     };
 
+    const handleOnline = () => {
+      publishLocalPresence();
+      syncRemotePresence();
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("focus", handleFocus);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("pageshow", handleOnline);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("pageshow", handleOnline);
     };
   }, [conversationId, publishLocalPresence, syncRemotePresence]);
 
