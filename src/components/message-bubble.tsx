@@ -363,7 +363,7 @@ export const MessageBubble = memo(function MessageBubble({
                     bubbleBg, ringColor,
                     highlighted && "ring-2 ring-amber-400/60 bg-amber-200/10 dark:bg-amber-500/10",
                     mine ? "rounded-tr-md" : "rounded-tl-md",
-                    m.is_saved && "rounded-md pr-8 ring-2 ring-yellow-400/50 shadow-[0_0_18px_rgba(250,204,21,0.28)] saved-message-highlight",
+                    m.is_saved && "rounded-md pr-8 ring-2 ring-primary/60 shadow-[0_0_18px_rgba(139,92,246,0.42),0_0_28px_rgba(59,130,246,0.18)] saved-message-highlight",
                     m.is_optimistic && "opacity-70 grayscale-[0.3]"
                   )}
                 style={{ transform: `translateX(${slideOffset}px)`, maxWidth: "100%", overflowWrap: "anywhere" }}
@@ -443,7 +443,7 @@ export const MessageBubble = memo(function MessageBubble({
                 )}
 
                 {m.is_saved && (
-                  <div className={cn("absolute right-2 top-2", mine ? "text-yellow-400" : "text-yellow-400")}>
+                  <div className="absolute right-2 top-2 text-primary">
                     <Star className="size-3 fill-current" />
                   </div>
                 )}
@@ -590,12 +590,12 @@ export const MessageBubble = memo(function MessageBubble({
                         }}
                         className="gap-2 px-3 py-2.5"
                       >
-                        <Star className="size-4 fill-current text-yellow-400" />
+                        <Star className="size-4 fill-current text-primary" />
                         <span>Unsave</span>
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem disabled className="gap-2 px-3 py-2.5 opacity-50 cursor-not-allowed">
-                        <Star className="size-4 fill-current text-yellow-400" />
+                        <Star className="size-4 fill-current text-primary" />
                         <span>Saved by other user</span>
                       </DropdownMenuItem>
                     )
@@ -706,12 +706,12 @@ export const MessageBubble = memo(function MessageBubble({
                         }}
                         className="gap-2 px-3 py-2.5"
                       >
-                        <Star className="size-4 fill-current text-yellow-400" />
+                          <Star className="size-4 fill-current text-primary" />
                         <span>Unsave</span>
                       </ContextMenuItem>
                     ) : (
                       <ContextMenuItem disabled className="gap-2 px-3 py-2.5 opacity-50 cursor-not-allowed">
-                        <Star className="size-4 fill-current text-yellow-400" />
+                          <Star className="size-4 fill-current text-primary" />
                         <span>Saved by other user</span>
                       </ContextMenuItem>
                     )
