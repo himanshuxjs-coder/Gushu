@@ -164,19 +164,26 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
     <div className="fixed inset-0 z-50 flex flex-col bg-black text-white md:rounded-3xl md:inset-4 md:shadow-2xl overflow-hidden">
       <div ref={flashRef} className="pointer-events-none absolute inset-0 z-30 bg-white opacity-0" />
 
-      <div className="flex items-center justify-between p-4 z-20">
+      <div className="relative z-20 flex items-center justify-between border-b border-white/10 bg-black/30 px-4 py-3 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <button
             onClick={onClose}
-            className="grid size-8 place-items-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            className="grid size-9 place-items-center rounded-xl border border-white/10 bg-white/10 text-white/80 transition-all hover:border-white/25 hover:bg-white/20 hover:text-white active:scale-95"
+            aria-label="Close camera"
           >
-            <X className="size-5" />
+            <X className="size-4" />
           </button>
-          <h3 className="text-sm font-medium">Capture Photo</h3>
+          <div>
+            <h3 className="text-sm font-semibold tracking-tight">Capture Photo</h3>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">Studio capture</p>
+          </div>
+        </div>
+        <div className="rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
+          {facingMode === "user" ? "Front" : "Rear"}
         </div>
       </div>
 
-      <div className="relative flex-1 bg-neutral-900 overflow-hidden flex items-center justify-center">
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-neutral-950">
         {!capturedBlob ? (
           <>
             <video
@@ -189,12 +196,19 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
                 transform: facingMode === "user" ? "scaleX(-1)" : "none",
               }}
             />
+            <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.52)_100%)]" />
+            <div className="pointer-events-none absolute inset-8 z-10 rounded-[2rem] border border-white/15 sm:inset-14">
+              <span className="absolute -left-px -top-px h-10 w-10 rounded-tl-2xl border-l-2 border-t-2 border-white/80" />
+              <span className="absolute -right-px -top-px h-10 w-10 rounded-tr-2xl border-r-2 border-t-2 border-white/80" />
+              <span className="absolute -bottom-px -left-px h-10 w-10 rounded-bl-2xl border-b-2 border-l-2 border-white/80" />
+              <span className="absolute -bottom-px -right-px h-10 w-10 rounded-br-2xl border-b-2 border-r-2 border-white/80" />
+            </div>
 
-            <div className="absolute bottom-10 left-0 right-0 z-20 flex items-center justify-center gap-6">
+            <div className="absolute bottom-8 left-0 right-0 z-20 flex items-center justify-center gap-5 px-6">
               {torchAvailable && (
                 <button
                   onClick={toggleTorch}
-                  className="grid size-12 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                  className="grid size-12 place-items-center rounded-2xl border border-white/10 bg-black/25 text-white/80 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl transition-all hover:border-white/25 hover:bg-white/15 hover:text-white active:scale-95"
                   aria-label="Toggle flash"
                 >
                   {flashOn ? <Zap className="size-5" /> : <ZapOff className="size-5" />}
@@ -203,7 +217,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
 
               <button
                 onClick={toggleCamera}
-                className="grid size-12 place-items-center rounded-full border border-white/10 bg-white/10 text-white shadow-[0_0_20px_rgba(255,255,255,0.08)] transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/20 hover:shadow-[0_0_24px_rgba(255,255,255,0.16)] active:scale-95"
+                className="grid size-12 place-items-center rounded-2xl border border-white/10 bg-black/25 text-white/80 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/15 hover:text-white active:scale-95"
                 aria-label="Switch camera"
               >
                 <RefreshCcw className="size-6 transition-transform duration-300 hover:rotate-180" />
@@ -211,9 +225,10 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
 
               <button
                 onClick={capturePhoto}
-                className="size-20 rounded-full border-4 border-white bg-transparent transition-transform hover:scale-105 active:scale-95"
+                className="group relative size-[5.5rem] rounded-full border-2 border-white/80 bg-white/10 p-1 shadow-[0_0_0_6px_rgba(255,255,255,0.12),0_0_35px_rgba(255,255,255,0.22)] backdrop-blur-sm transition-transform hover:scale-105 active:scale-95"
+                aria-label="Take photo"
               >
-                <div className="size-16 rounded-full bg-white" />
+                <div className="size-full rounded-full bg-white transition-transform duration-300 group-hover:scale-95" />
               </button>
 
               <div className="size-12" />
@@ -222,14 +237,15 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
         ) : (
           <>
             {previewUrl && (
-              <img src={previewUrl} alt="Captured" className="h-full w-full object-contain" />
+              <img src={previewUrl} alt="Captured" className="h-full w-full object-contain p-6 sm:p-10" />
             )}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/20" />
 
-            <div className="absolute bottom-10 left-0 right-0 z-20 flex items-center justify-center gap-4 px-4">
+            <div className="absolute bottom-8 left-0 right-0 z-20 flex items-center justify-center gap-3 px-6">
               <Button
                 variant="secondary"
                 onClick={handleDiscard}
-                className="flex-1 gap-2 rounded-xl"
+                className="h-11 flex-1 gap-2 rounded-xl border border-white/15 bg-white/10 text-white backdrop-blur-xl hover:bg-white/20"
                 disabled={busy}
               >
                 <Trash2 className="size-4" />
@@ -237,7 +253,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
               </Button>
               <Button
                 onClick={handleSend}
-                className="flex-1 gap-2 rounded-xl brand-gradient"
+                className="h-11 flex-1 gap-2 rounded-xl brand-gradient shadow-[0_0_24px_rgba(99,102,241,0.35)]"
                 disabled={busy}
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}

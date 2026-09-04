@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Mic, Square, Trash2, Send, Loader2, Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface VoiceRecorderProps {
@@ -15,6 +14,8 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackTime, setPlaybackTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   const [busy, setBusy] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -90,18 +91,30 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
     setRecordedBlob(null);
     setPreviewUrl(null);
     setDuration(0);
+    setPlaybackTime(0);
+    setAudioDuration(0);
+    setIsPlaying(false);
     if (!isRecording) onCancel();
   };
 
-  const togglePlayback = () => {
+  const togglePlayback = async () => {
     if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause();
       } else {
-        audioRef.current.play();
+        try {
+          await audioRef.current.play();
+        } catch {
+          toast.error("Unable to play recording");
+        }
       }
-      setIsPlaying(!isPlaying);
     }
+  };
+
+  const seekPlayback = (value: number) => {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = value;
+    setPlaybackTime(value);
   };
 
   const formatDuration = (seconds: number) => {
@@ -116,25 +129,25 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
   }, []);
 
   return (
-    <div className="flex w-full items-center gap-3 rounded-2xl bg-muted/50 p-2 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2">
-      <div className="flex h-10 flex-1 items-center gap-3 px-3">
+    <div className="flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-card/90 p-2 shadow-[0_16px_50px_rgba(0,0,0,0.18)] backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2">
+      <div className="flex min-h-12 flex-1 items-center gap-3 rounded-xl bg-muted/40 px-3 py-2">
         {isRecording ? (
           <>
             <div className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
             </div>
-            <span className="text-sm font-medium tabular-nums text-foreground">
+            <span className="min-w-10 text-sm font-semibold tabular-nums text-foreground">
               {formatDuration(duration)}
             </span>
             <div className="flex-1 overflow-hidden">
-              <div className="flex gap-0.5 items-center justify-center">
-                {[...Array(20)].map((_, i) => (
+              <div className="flex h-8 items-center justify-center gap-1">
+                {[...Array(28)].map((_, i) => (
                   <div 
                     key={i} 
-                    className="w-0.5 bg-primary/40 rounded-full animate-pulse" 
+                    className="w-1 rounded-full bg-primary/50 animate-pulse"
                     style={{ 
-                      height: `${Math.random() * 16 + 4}px`,
+                      height: `${8 + ((i * 13) % 20)}px`,
                       animationDelay: `${i * 0.05}s`
                     }} 
                   />
@@ -152,12 +165,30 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
             >
               {isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
             </Button>
-            <span className="text-sm font-medium tabular-nums text-foreground">
-              {formatDuration(duration)}
+            <span className="min-w-10 text-xs font-semibold tabular-nums text-foreground">
+              {formatDuration(playbackTime)}
             </span>
-            <div className="flex-1 h-1 bg-primary/20 rounded-full overflow-hidden">
-              <div className={cn("h-full bg-primary transition-all duration-300", isPlaying ? "w-full" : "w-0")} />
+            <div className="relative flex flex-1 items-center">
+              <div className="absolute inset-x-0 h-1.5 rounded-full bg-primary/15" />
+              <div
+                className="pointer-events-none absolute left-0 h-1.5 rounded-full brand-gradient"
+                style={{ width: `${audioDuration ? (playbackTime / audioDuration) * 100 : 0}%` }}
+              />
+              <input
+                type="range"
+                min="0"
+                max={audioDuration || 0}
+                step="0.01"
+                value={Math.min(playbackTime, audioDuration || 0)}
+                onChange={(event) => seekPlayback(Number(event.target.value))}
+                disabled={!audioDuration}
+                aria-label="Recording playback position"
+                className="relative z-10 h-5 w-full cursor-pointer appearance-none bg-transparent accent-primary"
+              />
             </div>
+            <span className="min-w-10 text-right text-xs tabular-nums text-muted-foreground">
+              {formatDuration(audioDuration || duration)}
+            </span>
           </>
         )}
       </div>
@@ -165,7 +196,14 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
       <audio 
         ref={audioRef} 
         src={previewUrl || ""} 
-        onEnded={() => setIsPlaying(false)}
+        onLoadedMetadata={(event) => setAudioDuration(event.currentTarget.duration || 0)}
+        onTimeUpdate={(event) => setPlaybackTime(event.currentTarget.currentTime)}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => {
+          setIsPlaying(false);
+          setPlaybackTime(0);
+        }}
         className="hidden"
       />
 
