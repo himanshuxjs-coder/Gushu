@@ -248,10 +248,10 @@ export function ChatHeader({
         {/* Aesthetic Brand Gradient Border (Bottom) */}
         <div
           className={cn(
-            "absolute bottom-0 left-0 h-[2px] w-full brand-gradient transition-all duration-500",
+            "absolute bottom-0 left-0 h-[2px] w-full origin-center brand-gradient transition-[transform,opacity,box-shadow] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]",
             otherIsViewing
-              ? "opacity-100 shadow-[0_0_25px_rgba(139,92,246,0.8)] animate-pulse"
-              : "opacity-0 shadow-none",
+              ? "scale-x-100 opacity-100 shadow-[0_0_25px_rgba(139,92,246,0.8)] animate-pulse"
+              : "scale-x-0 opacity-0 shadow-none",
           )}
         />
         {loading || !other ? (
