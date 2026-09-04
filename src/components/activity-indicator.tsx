@@ -6,7 +6,7 @@ interface ActivityIndicatorProps {
 }
 
 export function ActivityIndicator({ active }: ActivityIndicatorProps) {
-  const label = "Viewing";
+  const label = "Lalalala😙";
 
   return (
     <div
@@ -15,7 +15,7 @@ export function ActivityIndicator({ active }: ActivityIndicatorProps) {
         active ? "max-h-14 opacity-100 py-1.5" : "max-h-0 opacity-0 py-0 overflow-hidden",
       )}
       aria-hidden={!active}
-    >
+    >   
       <div className="pointer-events-none flex items-center gap-2 rounded-md border border-border bg-card/90 px-4 py-2 shadow-[0_8px_30px_rgb(0,0,0,0.12)] backdrop-blur-xl">
         <div className="flex w-full items-center gap-2 whitespace-nowrap text-[11px] font-semibold tracking-wider">
           <div className="flex items-center gap-2 text-emerald-500">
