@@ -70,6 +70,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: selectedMicrophoneRef.current ? { deviceId: { exact: selectedMicrophoneRef.current } } : true,
       });
+      activeStreamRef.current = stream;
       await loadMicrophones(stream.getAudioTracks()[0]?.getSettings().deviceId);
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -84,7 +85,8 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
       mediaRecorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
+        stream.getTracks().forEach((track) => track.stop());
+        if (activeStreamRef.current === stream) activeStreamRef.current = null;
 
         if (restartWithMicrophoneRef.current) {
           restartWithMicrophoneRef.current = false;
@@ -249,8 +251,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
               {formatDuration(audioDuration || duration)}
             </span>
           </>
-        )}
-              activeStreamRef.current = stream;
+          )}
       </div>
 
       {isDesktop && microphones.length > 0 && (
@@ -266,7 +267,6 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
               <option key={device.deviceId} value={device.deviceId} className="bg-neutral-950 text-white">
                 {device.label || `Microphone ${index + 1}`}
               </option>
-                if (activeStreamRef.current === stream) activeStreamRef.current = null;
             ))}
           </select>
         </label>
@@ -328,7 +328,6 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
               <Send className="size-5" />
             )}
           </Button>
-            stopMicrophone();
         )}
       </div>
     </div>
