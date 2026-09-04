@@ -66,6 +66,7 @@ interface ChatHeaderProps {
   isHiddenLocked?: boolean;
   loading?: boolean;
   hasSavedByMe?: boolean;
+  otherIsViewing?: boolean;
 }
 
 export function ChatHeader({
@@ -79,6 +80,7 @@ export function ChatHeader({
   isHiddenLocked,
   loading,
   hasSavedByMe,
+  otherIsViewing = false,
 }: ChatHeaderProps) {
   const leave = useServerFn(leaveConversation);
   const hideFn = useServerFn(toggleConversationHidden);
@@ -244,7 +246,14 @@ export function ChatHeader({
     <>
       <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-border bg-card/80 px-4 backdrop-blur-xl sm:h-20 sm:px-6">
         {/* Aesthetic Brand Gradient Border (Bottom) */}
-        <div className="absolute bottom-0 left-0 h-[1.5px] w-full brand-gradient opacity-0" />
+        <div
+          className={cn(
+            "absolute bottom-0 left-0 h-[2px] w-full brand-gradient transition-all duration-500",
+            otherIsViewing
+              ? "opacity-100 shadow-[0_0_25px_rgba(139,92,246,0.8)] animate-pulse"
+              : "opacity-0 shadow-none",
+          )}
+        />
         {loading || !other ? (
           <div className="flex min-w-0 items-center gap-3">
              <Button

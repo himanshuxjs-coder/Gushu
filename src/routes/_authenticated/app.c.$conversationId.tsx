@@ -887,6 +887,7 @@ function ChatPage() {
         isHiddenLocked={isHiddenLocked}
         loading={conv.isLoading && !conv.data}
         hasSavedByMe={hasSavedByMe}
+        otherIsViewing={otherIsViewing}
       />
 
       {isLocked || isHiddenLocked ? (
