@@ -38,10 +38,10 @@ const THEME_BG: Record<string, string> = {
 
 const WALLPAPER_STYLE: Record<string, string> = {
   none: "",
-  grid: "bg-[radial-gradient(circle,_rgba(255,255,255,0.05)_1px,_transparent_1px)] bg-[size:20px_20px]",
-  dots: "bg-[radial-gradient(rgba(255,255,255,0.1)_1px,_transparent_1px)] bg-[size:16px_16px]",
-  waves: "bg-gradient-to-br from-blue-950/20 via-blue-900/20 to-blue-950/20",
-  aurora: "bg-gradient-to-br from-emerald-950/20 via-teal-900/20 to-emerald-950/20",
+  grid: "",
+  dots: "",
+  waves: "",
+  aurora: "",
 };
 
 function ChatPage() {
@@ -914,7 +914,8 @@ function ChatPage() {
         <>
           <div
             ref={scrollRef}
-            className={cn("min-h-0 flex-1 overflow-y-auto px-4 py-6 space-y-5 sm:px-8 no-scrollbar relative", wallpaperClass)}
+            data-wallpaper={wallpaper}
+            className={cn("chat-wallpaper min-h-0 flex-1 overflow-y-auto px-4 py-6 space-y-5 sm:px-8 no-scrollbar relative", wallpaperClass)}
           >
             {msgs.isLoading && (
               <div className="grid h-full place-items-center text-muted-foreground">
