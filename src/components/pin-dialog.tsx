@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +28,7 @@ export function PinDialog({ open, title, description, onSubmit, onCancel, errorM
   const digits = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
 
   const press = async (d: string) => {
+    if (loading) return;
     if (d === "⌫") {
       setPin((p) => p.slice(0, -1));
       setError(null);
@@ -51,6 +52,25 @@ export function PinDialog({ open, title, description, onSubmit, onCancel, errorM
       }
     }
   };
+
+  useEffect(() => {
+    if (!open || typeof window === "undefined" || window.matchMedia("(max-width: 768px)").matches) {
+      return;
+    }
+
+    const handleDesktopKeyDown = (event: KeyboardEvent) => {
+      if (/^[0-9]$/.test(event.key)) {
+        event.preventDefault();
+        void press(event.key);
+      } else if (event.key === "Backspace" || event.key === "Delete") {
+        event.preventDefault();
+        void press("⌫");
+      }
+    };
+
+    window.addEventListener("keydown", handleDesktopKeyDown);
+    return () => window.removeEventListener("keydown", handleDesktopKeyDown);
+  }, [open, loading, pin]);
 
   return (
     <Dialog open={open} onOpenChange={() => {}}>
