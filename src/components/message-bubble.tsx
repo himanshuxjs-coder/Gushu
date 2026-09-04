@@ -359,11 +359,11 @@ export const MessageBubble = memo(function MessageBubble({
                     }
                   }}
                   className={cn(
-                    "relative inline-block max-w-full min-w-[2rem] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ring-1 transition-all duration-100 select-text cursor-pointer active:scale-[0.98] hover:ring-primary/20",
+                    "relative inline-block max-w-full min-w-[2rem] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ring-1 transition-all duration-300 select-text cursor-pointer active:scale-[0.98] hover:ring-primary/20",
                     bubbleBg, ringColor,
                     highlighted && "ring-2 ring-amber-400/60 bg-amber-200/10 dark:bg-amber-500/10",
                     mine ? "rounded-tr-md" : "rounded-tl-md",
-                    m.is_saved && "pr-8",
+                    m.is_saved && "rounded-md pr-8 ring-2 ring-yellow-400/50 shadow-[0_0_18px_rgba(250,204,21,0.28)] saved-message-highlight",
                     m.is_optimistic && "opacity-70 grayscale-[0.3]"
                   )}
                 style={{ transform: `translateX(${slideOffset}px)`, maxWidth: "100%", overflowWrap: "anywhere" }}
