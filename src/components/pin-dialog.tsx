@@ -76,6 +76,7 @@ export function PinDialog({ open, title, description, onSubmit, onCancel, errorM
     <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent
         className="w-80 rounded-2xl bg-card"
+        showClose={false}
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
