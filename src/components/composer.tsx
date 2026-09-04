@@ -122,6 +122,16 @@ export function Composer({
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }, [defaultScheduleTime]);
 
+  const formatScheduledLabel = useCallback((scheduledFor: string) => {
+    const date = new Date(scheduledFor);
+    if (Number.isNaN(date.getTime())) return "Invalid date";
+    const pad = (value: number) => String(value).padStart(2, "0");
+    const hours = date.getHours();
+    const meridiem = hours >= 12 ? "PM" : "AM";
+    const hour12 = hours % 12 || 12;
+    return `${pad(date.getMonth() + 1)}/${pad(date.getDate())}/${String(date.getFullYear()).slice(-2)} ${hour12}:${pad(date.getMinutes())} ${meridiem}`;
+  }, []);
+
   const openSchedule = useCallback((message = text, item: ScheduledMessage | null = null) => {
     setEditingSchedule(item);
     setScheduleContent(item?.content ?? message);
@@ -687,7 +697,7 @@ export function Composer({
                   <div key={item.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs text-foreground">{item.content}</p>
-                      <p className="mt-0.5 text-[10px] text-primary">{new Date(item.scheduled_for).toLocaleString()}</p>
+                      <p className="mt-0.5 text-[10px] text-primary">{formatScheduledLabel(item.scheduled_for)}</p>
                     </div>
                     <button type="button" onClick={() => openSchedule(item.content, item)} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary" aria-label="Edit scheduled message">
                       <Pencil className="size-3.5" />
