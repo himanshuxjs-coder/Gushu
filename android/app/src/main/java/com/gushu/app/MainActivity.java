@@ -7,6 +7,7 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,6 +17,7 @@ import android.webkit.PermissionRequest;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebChromeClient;
@@ -83,6 +85,22 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void setupWebView() {
+        // Optimize WebView settings for performance
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+        
+        // Support for modern web features
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
+        
+        // Hardware acceleration
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
         // Inject our client into the bridge's WebView
         webView.setWebViewClient(new WebViewClient() {
             @Override
