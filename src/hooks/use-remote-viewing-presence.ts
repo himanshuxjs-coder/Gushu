@@ -78,13 +78,9 @@ export function useRemoteViewingPresence(
     if (!channel || !subscribedRef.current) return;
 
     if (viewingRef.current) {
-      channel.send({
-        type: "presence",
-        event: "track",
-        payload: { user_id: meId, viewing: true },
-      });
+      void channel.track({ user_id: meId, viewing: true });
     } else {
-      channel.send({ type: "presence", event: "untrack" });
+      void channel.untrack();
     }
   }, [meId]);
 
@@ -224,9 +220,7 @@ export function useRemoteViewingPresence(
         initialSyncTimerRef.current = null;
       }
       if (channelRef.current) {
-        try {
-          channelRef.current.send({ type: "presence", event: "untrack" }).catch(() => {});
-        } catch {}
+        void channelRef.current.untrack().catch(() => {});
         try {
           supabase.removeChannel(channelRef.current);
         } catch {}
