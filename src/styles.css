@@ -336,26 +336,26 @@
   animation: saved-message-highlight 700ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@keyframes saved-square-enter {
+@keyframes saved-cube-enter {
   from { opacity: 0; transform: scale(0.35) rotate(-18deg); }
   65% { opacity: 1; transform: scale(1.18) rotate(6deg); }
   to { opacity: 1; transform: scale(1) rotate(0); }
 }
 
-@keyframes saved-square-exit {
+@keyframes saved-cube-exit {
   from { opacity: 1; transform: scale(1) rotate(0); }
   to { opacity: 0; transform: scale(0.35) rotate(18deg); }
 }
 
-@utility saved-square-enter {
-  animation: saved-square-enter 420ms cubic-bezier(0.22, 1, 0.36, 1);
+@utility saved-cube-enter {
+  animation: saved-cube-enter 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@utility saved-square-exit {
-  animation: saved-square-exit 420ms cubic-bezier(0.4, 0, 1, 1) forwards;
+@utility saved-cube-exit {
+  animation: saved-cube-exit 420ms cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
-@utility saved-square-glow {
+@utility saved-cube-glow {
   color: #a78bfa;
   filter: drop-shadow(0 0 3px rgba(167, 139, 250, 0.95)) drop-shadow(0 0 8px rgba(59, 130, 246, 0.65));
 }
