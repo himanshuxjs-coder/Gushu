@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 type Theme = "light" | "dark";
 
@@ -19,6 +20,38 @@ export function useTheme() {
     localStorage.setItem("gushu-theme", theme);
   }, [theme]);
 
+  // Sync the preference to the signed-in account so it follows the user across devices.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAccountTheme = async () => {
+      const { data } = await supabase.auth.getUser();
+      const accountTheme = data.user?.user_metadata?.gushu_theme;
+      if (!cancelled && (accountTheme === "light" || accountTheme === "dark")) {
+        setTheme(accountTheme);
+      }
+    };
+
+    void loadAccountTheme();
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+        const accountTheme = session?.user.user_metadata?.gushu_theme;
+        if (accountTheme === "light" || accountTheme === "dark") setTheme(accountTheme);
+      }
+      if (event === "SIGNED_OUT") setTheme(getInitial());
+    });
+
+    return () => {
+      cancelled = true;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const setAccountTheme = (next: Theme) => {
+    setTheme(next);
+    void supabase.auth.updateUser({ data: { gushu_theme: next } });
+  };
+
   return {
     theme,
     toggle: () => {
@@ -26,11 +59,11 @@ export function useTheme() {
       
       // Use View Transitions API if supported for premium animation
       if (typeof document !== "undefined" && (document as any).startViewTransition) {
-        (document as any).startViewTransition(() => setTheme(next));
+        (document as any).startViewTransition(() => setAccountTheme(next));
       } else {
-        setTheme(next);
+        setAccountTheme(next);
       }
     },
-    set: setTheme,
+    set: setAccountTheme,
   };
 }
