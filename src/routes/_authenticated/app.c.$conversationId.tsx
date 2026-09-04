@@ -968,7 +968,7 @@ function ChatPage() {
                         <span className="px-4 py-1.5 bg-emerald-600 text-white text-[12px] rounded-full font-semibold shadow-sm">New messages</span>
                       </div>
                     )}
-                    <div className={cn("animate-in-fade", idx < 8 && `stagger-${Math.min(idx + 1, 5)}`)}>
+                    <div className={cn(idx < 8 && "animate-in-fade", idx < 8 && `stagger-${Math.min(idx + 1, 5)}`)}>
                       <MessageBubble
                         m={m as any}
                         mine={m.sender_id === meId}

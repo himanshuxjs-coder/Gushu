@@ -188,6 +188,23 @@
   }
 }
 
+/* Keep older devices responsive while preserving the full visual treatment on capable hardware. */
+@media (prefers-reduced-motion: reduce), (update: slow) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
 /* View Transitions Support */
 ::view-transition-old(root),
 ::view-transition-new(root) {
