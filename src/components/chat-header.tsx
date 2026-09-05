@@ -123,7 +123,7 @@ export function ChatHeader({
     if (!otherId) return;
 
     // Subscribe to the shared draft/typing broadcast channel
-    const ch = supabase.channel(`draft:${conversationId}:header-${conversationId}`, {
+    const ch = supabase.channel(`draft:${conversationId}`, {
       config: { broadcast: { self: false } },
     });
 

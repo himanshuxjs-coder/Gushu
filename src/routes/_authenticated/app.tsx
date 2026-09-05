@@ -12,7 +12,6 @@ import { ConversationList } from "@/components/conversation-list";
 import { ProfileView } from "@/components/profile-view";
 import { Button } from "@/components/ui/button";
 import { listMyConversations } from "@/lib/conversations.functions";
-import { heartbeat } from "@/lib/profiles.functions";
 import { getIncognito } from "@/lib/privacy.functions";
 import { amIAdmin } from "@/lib/admin.functions";
 import { initializeGlobalNotifications, setActiveConversationId, unregisterPushNotifications } from "@/lib/notification-service";
@@ -28,13 +27,11 @@ function AppShell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const listFn = useServerFn(listMyConversations);
-  const beat = useServerFn(heartbeat);
   const isAdminFn = useServerFn(amIAdmin);
   const getIncognitoFn = useServerFn(getIncognito);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const profileChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const notifCleanupRef = useRef<(() => void) | null>(null);
-  const beatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -107,19 +104,6 @@ function AppShell() {
       }
     };
   }, [me?.id]);
-
-  // Presence heartbeat every 30s (was 1s — too aggressive)
-  useEffect(() => {
-    if (incognitoQuery.data?.incognito) {
-      if (beatTimerRef.current) clearInterval(beatTimerRef.current);
-      return;
-    }
-    beat({ data: undefined as any }).catch(() => {});
-    beatTimerRef.current = setInterval(() => beat({ data: undefined as any }).catch(() => {}), 30000);
-    return () => {
-      if (beatTimerRef.current) clearInterval(beatTimerRef.current);
-    };
-  }, [beat, incognitoQuery.data?.incognito]);
 
   const conversations = useQuery({
     queryKey: ["conversations"],
