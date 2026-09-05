@@ -139,7 +139,8 @@ function ChatPage() {
     enabled: !isLocked && !isHiddenLocked,
     staleTime: 3000,
     refetchOnWindowFocus: true,
-    refetchInterval: 2500,
+    // Realtime delivers new messages immediately; this only recovers missed events.
+    refetchInterval: 30000,
     refetchIntervalInBackground: false,
   });
 
