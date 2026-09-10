@@ -158,7 +158,7 @@ function RootShell({ children }: { children: ReactNode }) {
           }}
         />
       </head>
-      <body className="bg-textured min-h-screen">
+      <body className="bg-textured birthday-theme min-h-screen">
         {children}
         <Scripts />
       </body>

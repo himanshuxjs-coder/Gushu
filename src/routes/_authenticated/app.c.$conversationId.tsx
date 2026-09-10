@@ -153,6 +153,7 @@ function ChatPage() {
 
     const handleBlur = () => startAwayTimer();
     const handleFocus = () => endAwayTimer();
+    const handlePageHide = () => startAwayTimer();
     const storedAwayAt = Number(localStorage.getItem(awayStorageKey));
 
     if (storedAwayAt && Date.now() - storedAwayAt >= 60_000) lockChat();
@@ -162,12 +163,14 @@ function ChatPage() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleBlur);
     window.addEventListener("focus", handleFocus);
+    window.addEventListener("pagehide", handlePageHide);
 
     return () => {
       if (lockTimer) clearTimeout(lockTimer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleBlur);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("pagehide", handlePageHide);
     };
   }, [conversationId, meId, settings?.is_locked, settings?.pin_hash]);
 

@@ -188,6 +188,80 @@
   }
 }
 
+/* Birthday atmosphere: shared, decorative, and intentionally low-contrast so content stays easy to scan. */
+.birthday-theme {
+  --birthday-pink: oklch(0.72 0.2 355);
+  --birthday-yellow: oklch(0.86 0.17 92);
+  --birthday-cyan: oklch(0.78 0.16 205);
+  --birthday-mint: oklch(0.78 0.16 155);
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
+}
+
+.birthday-theme::before,
+.birthday-theme::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.birthday-theme::before {
+  z-index: -2;
+  background:
+    radial-gradient(55rem 28rem at 12% -8%, color-mix(in oklch, var(--birthday-pink), transparent 88%), transparent 70%),
+    radial-gradient(45rem 26rem at 88% 4%, color-mix(in oklch, var(--birthday-yellow), transparent 90%), transparent 72%),
+    radial-gradient(42rem 30rem at 52% 110%, color-mix(in oklch, var(--birthday-cyan), transparent 93%), transparent 74%);
+  animation: birthday-glow 14s ease-in-out infinite alternate;
+}
+
+.birthday-theme::after {
+  z-index: -1;
+  opacity: 0.34;
+  background-image:
+    linear-gradient(112deg, transparent 0 47%, var(--birthday-pink) 48% 53%, transparent 54% 100%),
+    linear-gradient(68deg, transparent 0 47%, var(--birthday-yellow) 48% 53%, transparent 54% 100%),
+    linear-gradient(8deg, transparent 0 47%, var(--birthday-cyan) 48% 53%, transparent 54% 100%),
+    linear-gradient(158deg, transparent 0 47%, var(--birthday-mint) 48% 53%, transparent 54% 100%);
+  background-size: 31px 43px, 47px 61px, 67px 79px, 83px 97px;
+  background-position: 7px -24px, 19px 11px, -13px 29px, 37px -7px;
+  mask-image: linear-gradient(to bottom, black, transparent 34%, transparent 78%, black);
+  animation: birthday-confetti 18s linear infinite;
+}
+
+.birthday-theme > * {
+  position: relative;
+  z-index: 0;
+}
+
+.birthday-theme > *::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: 2px;
+  z-index: 60;
+  pointer-events: none;
+  background: linear-gradient(90deg, var(--birthday-pink), var(--birthday-yellow), var(--birthday-cyan), var(--birthday-mint), var(--birthday-pink));
+  background-size: 220% 100%;
+  animation: birthday-ribbon 7s linear infinite;
+}
+
+@keyframes birthday-glow {
+  from { transform: scale(1) translate3d(-1%, -1%, 0); filter: hue-rotate(0deg); }
+  to { transform: scale(1.06) translate3d(1%, 1%, 0); filter: hue-rotate(16deg); }
+}
+
+@keyframes birthday-confetti {
+  from { transform: translate3d(0, -20px, 0) rotate(0deg); }
+  to { transform: translate3d(18px, 24px, 0) rotate(8deg); }
+}
+
+@keyframes birthday-ribbon {
+  from { background-position: 0% 50%; }
+  to { background-position: 220% 50%; }
+}
+
 /* Explicit wallpaper rules keep patterns visible in mobile overflow viewports. */
 .chat-wallpaper[data-wallpaper="grid"] {
   background-image: radial-gradient(circle, rgb(255 255 255 / 0.07) 1px, transparent 1px);
