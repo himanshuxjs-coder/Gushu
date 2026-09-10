@@ -396,7 +396,7 @@ export function ChatHeader({
                     <span className="size-1.5 rounded-full bg-muted-foreground/60" />
                     <span>Last seen </span>
                     <span key={awayLabel} className="animate-in-fade transition-all duration-300">
-                      {awayLabel}
+                      {awayLabel === "just now" ? awayLabel : `${awayLabel} ago`}
                     </span>
                   </span>
                 )}
