@@ -30,7 +30,7 @@ import { toggleConversationHidden, clearConversation, removeFromInbox } from "@/
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { verifyConversationPin } from "@/lib/conversation-settings.functions";
-import { isOnline } from "@/lib/format";
+import { isOnline, formatRelative } from "@/lib/format";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +67,6 @@ interface ChatHeaderProps {
   loading?: boolean;
   hasSavedByMe?: boolean;
   otherIsViewing?: boolean;
-  otherViewingReady?: boolean;
 }
 
 export function ChatHeader({
@@ -82,7 +81,6 @@ export function ChatHeader({
   loading,
   hasSavedByMe,
   otherIsViewing = false,
-  otherViewingReady = false,
 }: ChatHeaderProps) {
   const leave = useServerFn(leaveConversation);
   const hideFn = useServerFn(toggleConversationHidden);
@@ -105,10 +103,8 @@ export function ChatHeader({
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [alsoClearSaved, setAlsoClearSaved] = useState(false);
   const [statusElapsedSeconds, setStatusElapsedSeconds] = useState(0);
-  const inactiveSinceRef = useRef<number | null>(null);
-  const inactivityStorageKeyRef = useRef<string | null>(null);
 
-  const formatInactiveDuration = (seconds: number) => {
+  const formatLastSeen = (seconds: number) => {
     if (seconds < 60) return `${seconds}s`;
 
     const minutes = Math.floor(seconds / 60);
@@ -124,44 +120,21 @@ export function ChatHeader({
   };
 
   useEffect(() => {
-    if (!otherViewingReady || !other?.id) return;
-
-    const storageKey = `gushu-inactive-since:${conversationId}:${other.id}`;
-    if (inactivityStorageKeyRef.current !== storageKey) {
-      inactivityStorageKeyRef.current = storageKey;
-      inactiveSinceRef.current = null;
-    }
-
-    if (otherIsViewing) {
-      try {
-        localStorage.removeItem(storageKey);
-      } catch {}
-      inactiveSinceRef.current = null;
+    if (otherIsViewing || !other?.last_seen_at) {
       setStatusElapsedSeconds(0);
       return;
     }
 
-    let inactiveSince = inactiveSinceRef.current;
-    if (!inactiveSince) {
-      try {
-        const stored = Number(localStorage.getItem(storageKey));
-        inactiveSince = Number.isFinite(stored) && stored > 0 ? stored : Date.now();
-        localStorage.setItem(storageKey, String(inactiveSince));
-      } catch {
-        inactiveSince = Date.now();
-      }
-    }
-    inactiveSinceRef.current = inactiveSince;
-
+    const lastSeenAt = new Date(other.last_seen_at).getTime();
     const updateElapsed = () => {
-      setStatusElapsedSeconds(Math.max(0, Math.floor((Date.now() - inactiveSince) / 1000)));
+      setStatusElapsedSeconds(Math.max(0, Math.floor((Date.now() - lastSeenAt) / 1000)));
     };
 
     updateElapsed();
     const interval = setInterval(updateElapsed, 1_000);
 
     return () => clearInterval(interval);
-  }, [conversationId, other?.id, otherIsViewing, otherViewingReady]);
+  }, [other?.last_seen_at, otherIsViewing]);
 
   const openProfile = useCallback(async () => {
     if (!other) return;
@@ -398,15 +371,11 @@ export function ChatHeader({
                     <span className="size-1.5 rounded-full bg-emerald-400" /> Online
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="size-1.5 rounded-full bg-muted-foreground/60" />
-                    <span>Last seen</span>
-                    <span
-                      key={formatInactiveDuration(statusElapsedSeconds)}
-                      className="animate-in-fade transition-all duration-300"
-                    >
-                      {formatInactiveDuration(statusElapsedSeconds)}
-                    </span>
+                  <span
+                    key={formatLastSeen(statusElapsedSeconds)}
+                    className="inline-flex items-center gap-1.5 animate-in-fade transition-all duration-300"
+                  >
+                    <span className="size-1.5 rounded-full bg-muted-foreground/60" /> Last seen {formatLastSeen(statusElapsedSeconds)}
                   </span>
                 )}
               </p>

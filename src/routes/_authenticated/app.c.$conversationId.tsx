@@ -16,6 +16,7 @@ import { DateSeparator, shouldShowSeparator } from "@/components/date-separator"
 import { expireMessage } from "@/lib/message-delete.functions";
 import { ArrowDown, Loader as Loader2, CircleAlert as AlertCircle, Lock, KeyRound } from "lucide-react";
 import { cn, mergeRealtimeMessage, mergeMessages } from "@/lib/utils";
+import { isOnline } from "@/lib/format";
 import { subscribeWithReconnect } from "@/lib/realtime-utils";
 import { useHiddenStore } from "@/lib/hidden-store";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -113,11 +114,7 @@ function ChatPage() {
   const isHiddenLocked =
     !!settings?.is_hidden && !!settings?.secret_code_hash && !isSecretUnlocked && !isUnlockedGlobally;
 
-  const { isViewing: otherIsViewing, isReady: otherViewingReady } = useRemoteViewingPresence(
-    conversationId,
-    meId,
-    conv.data?.other?.id,
-  );
+  const otherIsViewing = useRemoteViewingPresence(conversationId, meId, conv.data?.other?.id);
 
   useEffect(() => {
     if (isLocked) {
@@ -893,7 +890,6 @@ function ChatPage() {
         loading={conv.isLoading && !conv.data}
         hasSavedByMe={hasSavedByMe}
         otherIsViewing={otherIsViewing}
-        otherViewingReady={otherViewingReady}
       />
 
       {isLocked || isHiddenLocked ? (
@@ -1003,7 +999,10 @@ function ChatPage() {
 
           </div>
 
-          <ActivityIndicator active={otherIsViewing} name={conv.data?.other?.display_name ?? conv.data?.other?.username} />
+          <ActivityIndicator
+            active={otherIsViewing || isOnline(conv.data?.other?.last_seen_at ?? null)}
+            lastSeen={conv.data?.other?.last_seen_at ?? null}
+          />
 
           {/* Modern floating "Go to Latest" button */}
           <div
