@@ -102,9 +102,10 @@ export function ChatHeader({
   const [profileOpen, setProfileOpen] = useState(false);
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [alsoClearSaved, setAlsoClearSaved] = useState(false);
+  const isOtherOnline = otherIsViewing || isOnline(other?.last_seen_at ?? null);
   const presenceStateRef = useRef<{ userId: string | null; viewing: boolean }>({
     userId: null,
-    viewing: otherIsViewing,
+    viewing: isOtherOnline,
   });
   const [awaySince, setAwaySince] = useState<number | null>(() =>
     other?.last_seen_at ? new Date(other.last_seen_at).getTime() : Date.now(),
@@ -116,9 +117,9 @@ export function ChatHeader({
 
     const previous = presenceStateRef.current;
     if (previous.userId !== other.id) {
-      presenceStateRef.current = { userId: other.id, viewing: otherIsViewing };
+      presenceStateRef.current = { userId: other.id, viewing: isOtherOnline };
       setAwaySince(
-        otherIsViewing
+        isOtherOnline
           ? null
           : other.last_seen_at
             ? new Date(other.last_seen_at).getTime()
@@ -127,14 +128,14 @@ export function ChatHeader({
       return;
     }
 
-    if (previous.viewing !== otherIsViewing) {
-      presenceStateRef.current = { userId: other.id, viewing: otherIsViewing };
-      setAwaySince(otherIsViewing ? null : Date.now());
+    if (previous.viewing !== isOtherOnline) {
+      presenceStateRef.current = { userId: other.id, viewing: isOtherOnline };
+      setAwaySince(isOtherOnline ? null : Date.now());
     }
-  }, [other, otherIsViewing]);
+  }, [other, isOtherOnline]);
 
   useEffect(() => {
-    if (otherIsViewing || awaySince === null) {
+    if (isOtherOnline || awaySince === null) {
       setAwayMinutes(0);
       return;
     }
@@ -146,7 +147,7 @@ export function ChatHeader({
     updateAwayMinutes();
     const timer = setInterval(updateAwayMinutes, 30_000);
     return () => clearInterval(timer);
-  }, [awaySince, otherIsViewing]);
+  }, [awaySince, isOtherOnline]);
 
   const awayLabel = awayMinutes < 1
     ? "just now"
@@ -386,7 +387,7 @@ export function ChatHeader({
                   <span className="text-xs text-muted-foreground">Hidden conversation</span>
                 ) : isTyping ? (
                   <TypingIndicator className="inline-flex" />
-                ) : otherIsViewing ? (
+                ) : isOtherOnline ? (
                   <span className="inline-flex items-center gap-1.5">
                     <span className="size-1.5 rounded-full bg-emerald-400" /> Online
                   </span>
