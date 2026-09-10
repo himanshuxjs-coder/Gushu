@@ -102,14 +102,10 @@ export function ChatHeader({
   const [profileOpen, setProfileOpen] = useState(false);
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [alsoClearSaved, setAlsoClearSaved] = useState(false);
-  const [statusSecondsAgo, setStatusSecondsAgo] = useState(0);
+  const [statusMinutesAgo, setStatusMinutesAgo] = useState(0);
 
-  const formatLastSeen = (seconds: number) => {
-    if (seconds < 60) return `${seconds} sec`;
-
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes < 60) return `${minutes} min ${remainingSeconds} sec`;
+  const formatLastSeen = (minutes: number) => {
+    if (minutes < 60) return `${minutes} min`;
 
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
@@ -122,17 +118,17 @@ export function ChatHeader({
 
   useEffect(() => {
     if (otherIsViewing || !other?.last_seen_at) {
-      setStatusSecondsAgo(0);
+      setStatusMinutesAgo(0);
       return;
     }
 
-    const updateElapsedTime = () => {
+    const updateMinutes = () => {
       const diffMs = Date.now() - new Date(other.last_seen_at).getTime();
-      setStatusSecondsAgo(Math.max(0, Math.floor(diffMs / 1000)));
+      setStatusMinutesAgo(Math.max(0, Math.floor(diffMs / 60000)));
     };
 
-    updateElapsedTime();
-    const interval = setInterval(updateElapsedTime, 1_000);
+    updateMinutes();
+    const interval = setInterval(updateMinutes, 30_000);
 
     return () => clearInterval(interval);
   }, [other?.last_seen_at, otherIsViewing]);
@@ -373,10 +369,10 @@ export function ChatHeader({
                   </span>
                 ) : (
                   <span
-                    key={statusSecondsAgo}
+                    key={statusMinutesAgo}
                     className="inline-flex items-center gap-1.5 animate-in-fade transition-all duration-300"
                   >
-                    <span className="size-1.5 rounded-full bg-muted-foreground/60" /> Last seen {formatLastSeen(statusSecondsAgo)}
+                    <span className="size-1.5 rounded-full bg-muted-foreground/60" /> Last seen {formatLastSeen(statusMinutesAgo)}
                   </span>
                 )}
               </p>
