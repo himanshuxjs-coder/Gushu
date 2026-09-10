@@ -998,11 +998,7 @@ function ChatPage() {
 
           </div>
 
-          <ActivityIndicator
-            active={otherIsViewing}
-            name={conv.data?.other?.display_name ?? conv.data?.other?.username}
-            lastSeen={conv.data?.other?.last_seen_at ?? null}
-          />
+          <ActivityIndicator active={otherIsViewing} name={conv.data?.other?.display_name ?? conv.data?.other?.username} />
 
           {/* Modern floating "Go to Latest" button */}
           <div
