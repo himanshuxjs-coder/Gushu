@@ -116,6 +116,62 @@ function ChatPage() {
   const otherIsViewing = useRemoteViewingPresence(conversationId, meId, conv.data?.other?.id);
 
   useEffect(() => {
+    if (!settings?.is_locked || !settings.pin_hash || typeof window === "undefined") return;
+
+    const awayStorageKey = `gushu-chat-away:${meId}:${conversationId}`;
+    let lockTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const lockChat = () => {
+      setIsUnlocked(false);
+      setShowPinPrompt(true);
+      localStorage.removeItem(awayStorageKey);
+    };
+
+    const startAwayTimer = (startedAt = Date.now()) => {
+      localStorage.setItem(awayStorageKey, String(startedAt));
+      if (lockTimer) clearTimeout(lockTimer);
+      lockTimer = setTimeout(() => {
+        if (Date.now() - startedAt >= 60_000) lockChat();
+      }, Math.max(0, 60_000 - (Date.now() - startedAt)));
+    };
+
+    const endAwayTimer = () => {
+      if (lockTimer) {
+        clearTimeout(lockTimer);
+        lockTimer = null;
+      }
+
+      const storedAwayAt = Number(localStorage.getItem(awayStorageKey));
+      localStorage.removeItem(awayStorageKey);
+      if (storedAwayAt && Date.now() - storedAwayAt >= 60_000) lockChat();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") startAwayTimer();
+      else endAwayTimer();
+    };
+
+    const handleBlur = () => startAwayTimer();
+    const handleFocus = () => endAwayTimer();
+    const storedAwayAt = Number(localStorage.getItem(awayStorageKey));
+
+    if (storedAwayAt && Date.now() - storedAwayAt >= 60_000) lockChat();
+    else if (document.visibilityState === "hidden") startAwayTimer(storedAwayAt || Date.now());
+    else if (storedAwayAt) startAwayTimer(storedAwayAt);
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      if (lockTimer) clearTimeout(lockTimer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [conversationId, meId, settings?.is_locked, settings?.pin_hash]);
+
+  useEffect(() => {
     if (isLocked) {
       setIsUnlocked(false);
       setShowPinPrompt(true);
