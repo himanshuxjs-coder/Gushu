@@ -375,11 +375,15 @@ export function ChatHeader({
                     <span className="size-1.5 rounded-full bg-emerald-400" /> Online
                   </span>
                 ) : (
-                  <span
-                    key={formatInactiveDuration(statusElapsedSeconds)}
-                    className="inline-flex items-center gap-1.5 animate-in-fade transition-all duration-300"
-                  >
-                    <span className="size-1.5 rounded-full bg-muted-foreground/60" /> Last seen {formatInactiveDuration(statusElapsedSeconds)}
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="size-1.5 rounded-full bg-muted-foreground/60" />
+                    <span>Last seen</span>
+                    <span
+                      key={formatInactiveDuration(statusElapsedSeconds)}
+                      className="animate-in-fade transition-all duration-300"
+                    >
+                      {formatInactiveDuration(statusElapsedSeconds)}
+                    </span>
                   </span>
                 )}
               </p>
