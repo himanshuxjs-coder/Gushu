@@ -102,7 +102,7 @@ export function ChatHeader({
   const [profileOpen, setProfileOpen] = useState(false);
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [alsoClearSaved, setAlsoClearSaved] = useState(false);
-  const isOtherOnline = otherIsViewing || isOnline(other?.last_seen_at ?? null);
+  const isOtherOnline = otherIsViewing;
   const presenceStateRef = useRef<{ userId: string | null; viewing: boolean }>({
     userId: null,
     viewing: isOtherOnline,
