@@ -30,7 +30,7 @@ import { toggleConversationHidden, clearConversation, removeFromInbox } from "@/
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { verifyConversationPin } from "@/lib/conversation-settings.functions";
-import { isOnline, formatRelative } from "@/lib/format";
+import { isOnline } from "@/lib/format";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +102,59 @@ export function ChatHeader({
   const [profileOpen, setProfileOpen] = useState(false);
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [alsoClearSaved, setAlsoClearSaved] = useState(false);
+  const presenceStateRef = useRef<{ userId: string | null; viewing: boolean }>({
+    userId: null,
+    viewing: otherIsViewing,
+  });
+  const [awaySince, setAwaySince] = useState<number | null>(() =>
+    other?.last_seen_at ? new Date(other.last_seen_at).getTime() : Date.now(),
+  );
+  const [awayMinutes, setAwayMinutes] = useState(0);
+
+  useEffect(() => {
+    if (!other) return;
+
+    const previous = presenceStateRef.current;
+    if (previous.userId !== other.id) {
+      presenceStateRef.current = { userId: other.id, viewing: otherIsViewing };
+      setAwaySince(
+        otherIsViewing
+          ? null
+          : other.last_seen_at
+            ? new Date(other.last_seen_at).getTime()
+            : Date.now(),
+      );
+      return;
+    }
+
+    if (previous.viewing !== otherIsViewing) {
+      presenceStateRef.current = { userId: other.id, viewing: otherIsViewing };
+      setAwaySince(otherIsViewing ? null : Date.now());
+    }
+  }, [other, otherIsViewing]);
+
+  useEffect(() => {
+    if (otherIsViewing || awaySince === null) {
+      setAwayMinutes(0);
+      return;
+    }
+
+    const updateAwayMinutes = () => {
+      setAwayMinutes(Math.max(0, Math.floor((Date.now() - awaySince) / 60000)));
+    };
+
+    updateAwayMinutes();
+    const timer = setInterval(updateAwayMinutes, 30_000);
+    return () => clearInterval(timer);
+  }, [awaySince, otherIsViewing]);
+
+  const awayLabel = awayMinutes < 1
+    ? "just now"
+    : awayMinutes < 60
+      ? `${awayMinutes}m`
+      : awayMinutes < 1440
+        ? `${Math.floor(awayMinutes / 60)}h ${awayMinutes % 60}m`
+        : `${Math.floor(awayMinutes / 1440)}d ${Math.floor((awayMinutes % 1440) / 60)}h ${awayMinutes % 60}m`;
 
   const openProfile = useCallback(async () => {
     if (!other) return;
@@ -333,12 +386,18 @@ export function ChatHeader({
                   <span className="text-xs text-muted-foreground">Hidden conversation</span>
                 ) : isTyping ? (
                   <TypingIndicator className="inline-flex" />
-                ) : isOnline(other.last_seen_at) ? (
+                ) : otherIsViewing ? (
                   <span className="inline-flex items-center gap-1.5">
                     <span className="size-1.5 rounded-full bg-emerald-400" /> Online
                   </span>
                 ) : (
-                  `Last seen ${formatRelative(other.last_seen_at)} ago`
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="size-1.5 rounded-full bg-muted-foreground/60" />
+                    <span>Last seen </span>
+                    <span key={awayLabel} className="animate-in-fade transition-all duration-300">
+                      {awayLabel}
+                    </span>
+                  </span>
                 )}
               </p>
             </div>
