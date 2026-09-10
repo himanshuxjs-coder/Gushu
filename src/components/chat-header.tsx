@@ -104,18 +104,6 @@ export function ChatHeader({
   const [alsoClearSaved, setAlsoClearSaved] = useState(false);
   const [statusMinutesAgo, setStatusMinutesAgo] = useState(0);
 
-  const formatLastSeen = (minutes: number) => {
-    if (minutes < 60) return `${minutes} min`;
-
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    if (hours < 24) return `${hours} hrs ${remainingMinutes} min`;
-
-    const days = Math.floor(hours / 24);
-    const remainingHours = hours % 24;
-    return `${days} d ${remainingHours} hrs ${remainingMinutes} min`;
-  };
-
   useEffect(() => {
     if (otherIsViewing || !other?.last_seen_at) {
       setStatusMinutesAgo(0);
@@ -368,11 +356,8 @@ export function ChatHeader({
                     <span className="size-1.5 rounded-full bg-emerald-400" /> Online
                   </span>
                 ) : (
-                  <span
-                    key={statusMinutesAgo}
-                    className="inline-flex items-center gap-1.5 animate-in-fade transition-all duration-300"
-                  >
-                    <span className="size-1.5 rounded-full bg-muted-foreground/60" /> Last seen {formatLastSeen(statusMinutesAgo)}
+                  <span className="inline-flex items-center gap-1.5 transition-all duration-300">
+                    <span className="size-1.5 rounded-full bg-muted-foreground/60" /> Last seen {statusMinutesAgo}m
                   </span>
                 )}
               </p>
