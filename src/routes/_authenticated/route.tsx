@@ -20,8 +20,8 @@ function AuthenticatedLayout() {
   usePushNotifications(user?.id);
   const updatePresenceFn = useServerFn(updatePresence);
 
-  // Update last_seen_at only when the app is actively changing state.
-  // This keeps the top status useful without hitting the DB every 30s.
+  // Heartbeat: update last_seen_at every 30s and on tab focus/visibility.
+  // This drives the "Online" / "Last seen" indicator for other users.
   useEffect(() => {
     if (!user?.id) return;
 
@@ -31,20 +31,20 @@ function AuthenticatedLayout() {
 
     beat();
 
+    const intervalId = setInterval(beat, 30_000);
+
     const onVisible = () => {
       if (document.visibilityState === "visible") beat();
     };
     const onFocus = () => beat();
-    const onBlur = () => beat();
 
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
-    window.addEventListener("blur", onBlur);
 
     return () => {
+      clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onFocus);
-      window.removeEventListener("blur", onBlur);
     };
   }, [user?.id, updatePresenceFn]);
 
