@@ -102,24 +102,6 @@ export function ChatHeader({
   const [profileOpen, setProfileOpen] = useState(false);
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [alsoClearSaved, setAlsoClearSaved] = useState(false);
-  const [statusMinutesAgo, setStatusMinutesAgo] = useState(0);
-
-  useEffect(() => {
-    if (otherIsViewing || !other?.last_seen_at) {
-      setStatusMinutesAgo(0);
-      return;
-    }
-
-    const updateMinutes = () => {
-      const diffMs = Date.now() - new Date(other.last_seen_at).getTime();
-      setStatusMinutesAgo(Math.max(0, Math.floor(diffMs / 60000)));
-    };
-
-    updateMinutes();
-    const interval = setInterval(updateMinutes, 30_000);
-
-    return () => clearInterval(interval);
-  }, [other?.last_seen_at, otherIsViewing]);
 
   const openProfile = useCallback(async () => {
     if (!other) return;
@@ -351,14 +333,12 @@ export function ChatHeader({
                   <span className="text-xs text-muted-foreground">Hidden conversation</span>
                 ) : isTyping ? (
                   <TypingIndicator className="inline-flex" />
-                ) : otherIsViewing || isOnline(other.last_seen_at) ? (
-                  <span className="inline-flex items-center gap-1.5 transition-all duration-300">
+                ) : isOnline(other.last_seen_at) ? (
+                  <span className="inline-flex items-center gap-1.5">
                     <span className="size-1.5 rounded-full bg-emerald-400" /> Online
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 transition-all duration-300">
-                    <span className="size-1.5 rounded-full bg-muted-foreground/60" /> Last seen {statusMinutesAgo}m
-                  </span>
+                  `Last seen ${formatRelative(other.last_seen_at)} ago`
                 )}
               </p>
             </div>

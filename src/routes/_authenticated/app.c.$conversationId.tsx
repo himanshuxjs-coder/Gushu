@@ -16,7 +16,6 @@ import { DateSeparator, shouldShowSeparator } from "@/components/date-separator"
 import { expireMessage } from "@/lib/message-delete.functions";
 import { ArrowDown, Loader as Loader2, CircleAlert as AlertCircle, Lock, KeyRound } from "lucide-react";
 import { cn, mergeRealtimeMessage, mergeMessages } from "@/lib/utils";
-import { isOnline } from "@/lib/format";
 import { subscribeWithReconnect } from "@/lib/realtime-utils";
 import { useHiddenStore } from "@/lib/hidden-store";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -999,10 +998,7 @@ function ChatPage() {
 
           </div>
 
-          <ActivityIndicator
-            active={otherIsViewing || isOnline(conv.data?.other?.last_seen_at ?? null)}
-            lastSeen={conv.data?.other?.last_seen_at ?? null}
-          />
+          <ActivityIndicator active={otherIsViewing} name={conv.data?.other?.display_name ?? conv.data?.other?.username} />
 
           {/* Modern floating "Go to Latest" button */}
           <div

@@ -17,9 +17,8 @@ export function useRemoteViewingPresence(
   conversationId: string | undefined,
   meId: string,
   otherId: string | undefined,
-): { isViewing: boolean; isReady: boolean } {
+): boolean {
   const [otherIsViewing, setOtherIsViewing] = useState(false);
-  const [presenceReady, setPresenceReady] = useState(false);
   const isLocallyViewing = useChatVisibility(conversationId);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const subscribedRef = useRef(false);
@@ -33,11 +32,9 @@ export function useRemoteViewingPresence(
   useEffect(() => {
     if (!conversationId || !meId) {
       setOtherIsViewing(false);
-      setPresenceReady(false);
       return;
     }
 
-    setPresenceReady(false);
     let disposed = false;
     let reconnectAttempt = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -155,10 +152,8 @@ export function useRemoteViewingPresence(
             reconnectAttempt = 0;
             trackCurrentViewing(channel);
             readRemoteViewing(channel);
-            setPresenceReady(true);
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
             subscribedRef.current = false;
-            setPresenceReady(false);
             scheduleReconnect();
           }
         });
@@ -197,7 +192,6 @@ export function useRemoteViewingPresence(
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("pageshow", handlePageShow);
       removeActiveChannel();
-      setPresenceReady(false);
       setOtherIsViewing(false);
     };
   }, [conversationId, meId]);
@@ -229,5 +223,5 @@ export function useRemoteViewingPresence(
     setOtherIsViewing(viewing);
   }, [conversationId, otherId]);
 
-  return { isViewing: otherIsViewing, isReady: presenceReady };
+  return otherIsViewing;
 }
