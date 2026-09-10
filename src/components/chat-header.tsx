@@ -30,7 +30,7 @@ import { toggleConversationHidden, clearConversation, removeFromInbox } from "@/
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { verifyConversationPin } from "@/lib/conversation-settings.functions";
-import { isOnline, formatRelative } from "@/lib/format";
+import { isOnline } from "@/lib/format";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -103,8 +103,9 @@ export function ChatHeader({
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [alsoClearSaved, setAlsoClearSaved] = useState(false);
   const [statusElapsedSeconds, setStatusElapsedSeconds] = useState(0);
+  const inactiveSinceRef = useRef<number | null>(null);
 
-  const formatLastSeen = (seconds: number) => {
+  const formatInactiveDuration = (seconds: number) => {
     if (seconds < 60) return `${seconds}s`;
 
     const minutes = Math.floor(seconds / 60);
@@ -120,21 +121,24 @@ export function ChatHeader({
   };
 
   useEffect(() => {
-    if (otherIsViewing || !other?.last_seen_at) {
+    if (otherIsViewing) {
+      inactiveSinceRef.current = null;
       setStatusElapsedSeconds(0);
       return;
     }
 
-    const lastSeenAt = new Date(other.last_seen_at).getTime();
+    const inactiveSince = inactiveSinceRef.current ?? Date.now();
+    inactiveSinceRef.current = inactiveSince;
+
     const updateElapsed = () => {
-      setStatusElapsedSeconds(Math.max(0, Math.floor((Date.now() - lastSeenAt) / 1000)));
+      setStatusElapsedSeconds(Math.max(0, Math.floor((Date.now() - inactiveSince) / 1000)));
     };
 
     updateElapsed();
     const interval = setInterval(updateElapsed, 1_000);
 
     return () => clearInterval(interval);
-  }, [other?.last_seen_at, otherIsViewing]);
+  }, [otherIsViewing]);
 
   const openProfile = useCallback(async () => {
     if (!other) return;
@@ -372,10 +376,10 @@ export function ChatHeader({
                   </span>
                 ) : (
                   <span
-                    key={formatLastSeen(statusElapsedSeconds)}
+                    key={formatInactiveDuration(statusElapsedSeconds)}
                     className="inline-flex items-center gap-1.5 animate-in-fade transition-all duration-300"
                   >
-                    <span className="size-1.5 rounded-full bg-muted-foreground/60" /> Last seen {formatLastSeen(statusElapsedSeconds)}
+                    <span className="size-1.5 rounded-full bg-muted-foreground/60" /> Last seen {formatInactiveDuration(statusElapsedSeconds)}
                   </span>
                 )}
               </p>
