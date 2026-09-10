@@ -52,7 +52,7 @@ export function SecretCodeDialog({
 
   return (
     <Dialog open={open} onOpenChange={() => onCancel?.()}>
-      <DialogContent className="box-border w-[calc(100vw-2rem)] max-w-96 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl border-border bg-card/95 p-4 shadow-2xl backdrop-blur-xl sm:p-6" onInteractOutside={(e) => e.preventDefault()}>
+      <DialogContent className="w-80 rounded-3xl border-border bg-card/95 backdrop-blur-xl shadow-2xl" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader className="space-y-4">
           <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
             <KeyRound className="size-7" />

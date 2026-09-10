@@ -75,7 +75,7 @@ export function PinDialog({ open, title, description, onSubmit, onCancel, errorM
   return (
     <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent
-        className="box-border w-[calc(100vw-2rem)] max-w-80 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-card p-4 sm:p-6"
+        className="w-80 rounded-2xl bg-card"
         showClose={false}
         onInteractOutside={(e) => e.preventDefault()}
       >
@@ -104,7 +104,7 @@ export function PinDialog({ open, title, description, onSubmit, onCancel, errorM
         {error && <p className="text-center text-xs text-destructive">{error}</p>}
 
         {/* Numpad */}
-        <div className="grid grid-cols-3 gap-2 px-0.5 sm:px-2">
+        <div className="grid grid-cols-3 gap-2 px-2">
           {digits.map((d, i) => (
             <button
               key={i}
