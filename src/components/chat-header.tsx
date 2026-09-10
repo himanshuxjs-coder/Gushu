@@ -67,6 +67,7 @@ interface ChatHeaderProps {
   loading?: boolean;
   hasSavedByMe?: boolean;
   otherIsViewing?: boolean;
+  otherViewingReady?: boolean;
 }
 
 export function ChatHeader({
@@ -81,6 +82,7 @@ export function ChatHeader({
   loading,
   hasSavedByMe,
   otherIsViewing = false,
+  otherViewingReady = false,
 }: ChatHeaderProps) {
   const leave = useServerFn(leaveConversation);
   const hideFn = useServerFn(toggleConversationHidden);
@@ -104,6 +106,7 @@ export function ChatHeader({
   const [alsoClearSaved, setAlsoClearSaved] = useState(false);
   const [statusElapsedSeconds, setStatusElapsedSeconds] = useState(0);
   const inactiveSinceRef = useRef<number | null>(null);
+  const inactivityStorageKeyRef = useRef<string | null>(null);
 
   const formatInactiveDuration = (seconds: number) => {
     if (seconds < 60) return `${seconds}s`;
@@ -121,13 +124,33 @@ export function ChatHeader({
   };
 
   useEffect(() => {
+    if (!otherViewingReady || !other?.id) return;
+
+    const storageKey = `gushu-inactive-since:${conversationId}:${other.id}`;
+    if (inactivityStorageKeyRef.current !== storageKey) {
+      inactivityStorageKeyRef.current = storageKey;
+      inactiveSinceRef.current = null;
+    }
+
     if (otherIsViewing) {
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {}
       inactiveSinceRef.current = null;
       setStatusElapsedSeconds(0);
       return;
     }
 
-    const inactiveSince = inactiveSinceRef.current ?? Date.now();
+    let inactiveSince = inactiveSinceRef.current;
+    if (!inactiveSince) {
+      try {
+        const stored = Number(localStorage.getItem(storageKey));
+        inactiveSince = Number.isFinite(stored) && stored > 0 ? stored : Date.now();
+        localStorage.setItem(storageKey, String(inactiveSince));
+      } catch {
+        inactiveSince = Date.now();
+      }
+    }
     inactiveSinceRef.current = inactiveSince;
 
     const updateElapsed = () => {
@@ -138,7 +161,7 @@ export function ChatHeader({
     const interval = setInterval(updateElapsed, 1_000);
 
     return () => clearInterval(interval);
-  }, [otherIsViewing]);
+  }, [conversationId, other?.id, otherIsViewing, otherViewingReady]);
 
   const openProfile = useCallback(async () => {
     if (!other) return;

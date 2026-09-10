@@ -113,7 +113,11 @@ function ChatPage() {
   const isHiddenLocked =
     !!settings?.is_hidden && !!settings?.secret_code_hash && !isSecretUnlocked && !isUnlockedGlobally;
 
-  const otherIsViewing = useRemoteViewingPresence(conversationId, meId, conv.data?.other?.id);
+  const { isViewing: otherIsViewing, isReady: otherViewingReady } = useRemoteViewingPresence(
+    conversationId,
+    meId,
+    conv.data?.other?.id,
+  );
 
   useEffect(() => {
     if (isLocked) {
@@ -889,6 +893,7 @@ function ChatPage() {
         loading={conv.isLoading && !conv.data}
         hasSavedByMe={hasSavedByMe}
         otherIsViewing={otherIsViewing}
+        otherViewingReady={otherViewingReady}
       />
 
       {isLocked || isHiddenLocked ? (
