@@ -102,12 +102,15 @@ export function ChatHeader({
   const [profileOpen, setProfileOpen] = useState(false);
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [alsoClearSaved, setAlsoClearSaved] = useState(false);
-  const [statusMinutesAgo, setStatusMinutesAgo] = useState(0);
+  const [statusElapsedSeconds, setStatusElapsedSeconds] = useState(0);
 
-  const formatLastSeen = (minutes: number) => {
-    if (minutes < 60) return `${minutes} min`;
+  const formatLastSeen = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`;
 
+    const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
+    if (hours === 0) return `${minutes} min`;
+
     const remainingMinutes = minutes % 60;
     if (hours < 24) return `${hours} hrs ${remainingMinutes} min`;
 
@@ -118,17 +121,17 @@ export function ChatHeader({
 
   useEffect(() => {
     if (otherIsViewing || !other?.last_seen_at) {
-      setStatusMinutesAgo(0);
+      setStatusElapsedSeconds(0);
       return;
     }
 
-    const updateMinutes = () => {
-      const diffMs = Date.now() - new Date(other.last_seen_at).getTime();
-      setStatusMinutesAgo(Math.max(0, Math.floor(diffMs / 60000)));
+    const lastSeenAt = new Date(other.last_seen_at).getTime();
+    const updateElapsed = () => {
+      setStatusElapsedSeconds(Math.max(0, Math.floor((Date.now() - lastSeenAt) / 1000)));
     };
 
-    updateMinutes();
-    const interval = setInterval(updateMinutes, 30_000);
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1_000);
 
     return () => clearInterval(interval);
   }, [other?.last_seen_at, otherIsViewing]);
@@ -363,16 +366,16 @@ export function ChatHeader({
                   <span className="text-xs text-muted-foreground">Hidden conversation</span>
                 ) : isTyping ? (
                   <TypingIndicator className="inline-flex" />
-                ) : otherIsViewing || isOnline(other.last_seen_at) ? (
+                ) : otherIsViewing ? (
                   <span className="inline-flex items-center gap-1.5 transition-all duration-300">
                     <span className="size-1.5 rounded-full bg-emerald-400" /> Online
                   </span>
                 ) : (
                   <span
-                    key={statusMinutesAgo}
+                    key={formatLastSeen(statusElapsedSeconds)}
                     className="inline-flex items-center gap-1.5 animate-in-fade transition-all duration-300"
                   >
-                    <span className="size-1.5 rounded-full bg-muted-foreground/60" /> Last seen {formatLastSeen(statusMinutesAgo)}
+                    <span className="size-1.5 rounded-full bg-muted-foreground/60" /> Last seen {formatLastSeen(statusElapsedSeconds)}
                   </span>
                 )}
               </p>
