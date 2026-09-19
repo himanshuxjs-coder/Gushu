@@ -324,9 +324,29 @@ async function registerPushNotifications(userId: string) {
 
 async function savePushToken(userId: string, token: string) {
   try {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || authData.user?.id !== userId) {
-      console.warn("[Push] Token registration skipped: session changed or is unavailable", authError);
+    let session = null;
+    let authError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const result = await supabase.auth.getSession();
+      session = result.data.session;
+      authError = result.error;
+      if (session?.user.id === userId && session.access_token) break;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    console.log(
+      "[Push] Supabase session before token registration:",
+      JSON.stringify({
+        hasSession: Boolean(session),
+        hasAccessToken: Boolean(session?.access_token),
+        sessionUserId: session?.user.id ?? null,
+        expectedUserId: userId,
+        authError,
+      }),
+    );
+
+    if (!session || session.user.id !== userId || !session.access_token) {
+      console.warn("[Push] Token registration skipped: authenticated session is unavailable");
       return;
     }
 
@@ -336,7 +356,7 @@ async function savePushToken(userId: string, token: string) {
       const { data, error } = await supabase.rpc("unregister_push_token", {
         p_token: previousToken,
       });
-      console.log("[Push] unregister_push_token result:", { data, error });
+      console.log("[Push] unregister_push_token result:", JSON.stringify({ data, error }));
     }
 
     console.log("[Push] Registering FCM token with Supabase");
@@ -344,7 +364,7 @@ async function savePushToken(userId: string, token: string) {
       p_token: token,
       p_device_type: "android",
     });
-    console.log("[Push] register_push_token result:", { data, error });
+    console.log("[Push] register_push_token result:", JSON.stringify({ data, error }));
 
     if (error || (Array.isArray(data) && data[0]?.success === false)) {
       console.error("[Push] FCM token registration failed:", error ?? data);
