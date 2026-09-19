@@ -27,12 +27,12 @@ export const usePushNotifications = (userId: string | undefined) => {
 
         if (Capacitor.getPlatform() === 'android') {
           await PushNotifications.createChannel({
-            id: 'gushu-priority-v1',
-            name: 'Gushu High Priority',
-            description: 'Important notifications that show over other apps',
+            id: 'gushu-message-v2',
+            name: 'Gushu Messages',
+            description: 'Incoming Gushu messages and alerts',
             importance: 5,
             visibility: 1,
-            sound: 'default',
+            sound: 'gushu_notification',
             vibration: true,
           });
         }

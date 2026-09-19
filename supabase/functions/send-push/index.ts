@@ -112,13 +112,18 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, error: "Method not allowed" }, { status: 405 });
     }
 
-    const { token, title, body } = await req.json();
+    const { token, title, body, conversationId, conversation_id } = await req.json();
     if (typeof token !== "string" || token.trim() === "") {
       return Response.json({ success: false, error: "A device token is required" }, { status: 400 });
     }
 
     const { accessToken, projectId } =
       await getAccessToken();
+
+    const dataPayload =
+      conversationId || conversation_id
+        ? { conversation_id: String(conversationId ?? conversation_id) }
+        : {};
 
     const response = await fetch(
       `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
@@ -135,11 +140,12 @@ Deno.serve(async (req) => {
               title,
               body,
             },
+            data: dataPayload,
             android: {
               priority: "HIGH",
               notification: {
-                channel_id: "gushu-priority-v1",
-                sound: "default",
+                channel_id: "gushu-message-v2",
+                sound: "gushu_notification",
                 default_vibrate_timings: true,
               },
             },

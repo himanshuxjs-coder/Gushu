@@ -269,12 +269,12 @@ async function registerPushNotifications(userId: string) {
 
     if (Capacitor.getPlatform() === "android") {
       await PushNotifications.createChannel({
-        id: "gushu-priority-v1",
-        name: "Gushu High Priority",
-        description: "Important notifications that show over other apps",
+        id: "gushu-message-v2",
+        name: "Gushu Messages",
+        description: "Incoming Gushu messages and alerts",
         importance: 5,
         visibility: 1,
-        sound: "default",
+        sound: "gushu_notification",
         vibration: true,
       });
     }
@@ -304,6 +304,13 @@ async function registerPushNotifications(userId: string) {
 
       await PushNotifications.addListener("pushNotificationActionPerformed", (notification) => {
         console.log("Push notification action performed", notification.actionId, notification.notification);
+        const conversationId =
+          (notification.notification?.data as Record<string, string | undefined> | undefined)?.conversation_id ??
+          (notification.data as Record<string, string | undefined> | undefined)?.conversation_id;
+        if (conversationId) {
+          window.location.href = `/app/c/${conversationId}`;
+          return;
+        }
         window.location.href = "/app";
       });
 
