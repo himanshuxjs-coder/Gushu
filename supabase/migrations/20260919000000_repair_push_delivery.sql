@@ -12,7 +12,13 @@ SET search_path = public, extensions
 AS $$
 DECLARE
   token_record RECORD;
+  supabase_url TEXT;
 BEGIN
+  supabase_url := COALESCE(
+    current_setting('SUPABASE_URL', true),
+    'https://sixmxaxsvtafvrjewitd.supabase.co'
+  );
+
   FOR token_record IN
     WITH registered_tokens AS (
       SELECT user_id, token FROM public.user_push_tokens
@@ -43,7 +49,7 @@ BEGIN
       )
   LOOP
     PERFORM net.http_post(
-      url := 'https://sixmxaxsvtafvrjewitd.supabase.co/functions/v1/send-push',
+      url := supabase_url || '/functions/v1/send-push',
       headers := '{"Content-Type":"application/json"}'::jsonb,
       body := jsonb_build_object(
         'token', token_record.token,

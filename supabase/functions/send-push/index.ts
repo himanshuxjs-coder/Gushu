@@ -94,6 +94,12 @@ async function getAccessToken() {
 
   const tokenData = await tokenResponse.json();
 
+  if (!tokenResponse.ok || !tokenData.access_token) {
+    throw new Error(
+      `Firebase access-token exchange failed: ${JSON.stringify(tokenData)}`
+    );
+  }
+
   return {
     accessToken: tokenData.access_token,
     projectId,
