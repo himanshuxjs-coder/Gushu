@@ -113,6 +113,7 @@ let globalUserId: string | null = null;
 let globalCleanupFn: (() => void) | null = null;
 let activeConversationId: string | null = null;
 let pushListenersRegistered = false;
+let pushRegistrationUserId: string | null = null;
 
 export function setActiveConversationId(conversationId: string | null) {
   activeConversationId = conversationId;
@@ -224,7 +225,7 @@ export function initializeGlobalNotifications(
 
   // Handle Push Notifications for Mobile
   if (Capacitor.isNativePlatform()) {
-    void registerPushNotifications(userId);
+    initializePushNotifications(userId);
   } else {
     // Request permission early for Web
     requestNotificationPermission().catch(() => { });
@@ -235,6 +236,13 @@ export function initializeGlobalNotifications(
   }, onUpdate);
 
   return globalCleanupFn;
+}
+
+export function initializePushNotifications(userId: string) {
+  if (!Capacitor.isNativePlatform() || pushRegistrationUserId === userId) return;
+
+  pushRegistrationUserId = userId;
+  void registerPushNotifications(userId);
 }
 
 async function registerPushNotifications(userId: string) {
@@ -367,6 +375,7 @@ export async function unregisterPushNotifications() {
 
     await PushNotifications.removeAllListeners();
     pushListenersRegistered = false;
+    pushRegistrationUserId = null;
     console.log("[Push] Firebase Messaging listeners removed");
   } catch (error) {
     console.error("[Push] Logout token cleanup failed:", error);
