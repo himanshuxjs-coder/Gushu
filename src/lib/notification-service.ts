@@ -87,6 +87,12 @@ export async function showPrivacyNotification(
     return null;
   }
 
+  // Android/iOS FCM is responsible for background and killed-app delivery.
+  // Do not create a second browser notification from the realtime subscription.
+  if (Capacitor.isNativePlatform()) {
+    return null;
+  }
+
   const hasPermission = await requestNotificationPermission();
   if (!hasPermission) return null;
 
@@ -310,6 +316,8 @@ async function registerPushNotifications(userId: string) {
           return;
         }
 
+        // Capacitor delivers foreground FCM messages to this listener instead of
+        // showing an Android system notification. Keep that behavior in-app.
         playNotificationSound();
         toast(notification.title || "Gushu", {
           description: notification.body || "New message!",
