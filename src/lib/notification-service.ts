@@ -316,12 +316,12 @@ async function registerPushNotifications(userId: string) {
           return;
         }
 
-        // Capacitor delivers foreground FCM messages to this listener instead of
-        // showing an Android system notification. Keep that behavior in-app.
-        playNotificationSound();
-        toast(notification.title || "Gushu", {
-          description: notification.body || "New message!",
-        });
+        // Realtime already shows the single in-app notification while visible.
+        // The FCM notification is reserved for Android background/killed delivery.
+        if (document.visibilityState === "visible") {
+          console.log("[Push] Foreground message handled by realtime notification");
+          return;
+        }
       });
 
       await PushNotifications.addListener("pushNotificationActionPerformed", (notification) => {
