@@ -9,11 +9,18 @@ import { updatePresence } from "@/lib/presence.functions";
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    // This route is client-only. Use the persisted session and avoid a
-    // second remote auth request while navigation is still settling.
-    const { data, error } = await supabase.auth.getSession();
-    if (error || !data.session?.user) throw redirect({ to: "/auth", replace: true });
-    return { user: data.session.user };
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !sessionData.session?.user) {
+      throw redirect({ to: "/auth", replace: true });
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) {
+      await supabase.auth.signOut({ scope: "local" });
+      throw redirect({ to: "/auth", replace: true });
+    }
+
+    return { user: userData.user };
   },
   component: AuthenticatedLayout,
 });
