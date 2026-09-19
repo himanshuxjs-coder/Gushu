@@ -133,6 +133,7 @@ function SettingsPage() {
   }
 
   async function signOutEverywhere() {
+    await unregisterPushNotifications();
     await supabase.auth.signOut({ scope: "global" });
     toast.success("Signed out on every device");
   }

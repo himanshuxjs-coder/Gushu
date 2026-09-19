@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { createFileRoute, Outlet, redirect, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useServerFn } from "@tanstack/react-start";
 import { updatePresence } from "@/lib/presence.functions";
 
@@ -22,7 +21,6 @@ function AuthenticatedLayout() {
   const { user } = Route.useRouteContext();
   const router = useRouter();
   const queryClient = useQueryClient();
-  usePushNotifications(user?.id);
   const updatePresenceFn = useServerFn(updatePresence);
 
   // Heartbeat: update last_seen_at every 30s and on tab focus/visibility.

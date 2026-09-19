@@ -1,8 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { subscribeWithReconnect } from "@/lib/realtime-utils";
 import { toast } from "sonner";
-import { PushNotifications, Token, PermissionStatus } from "@capacitor/push-notifications";
-import { Device } from "@capacitor/device";
+import { PushNotifications, Token } from "@capacitor/push-notifications";
 import { Capacitor } from "@capacitor/core";
 
 // Use a tiny local WebAudio chirp instead of downloading a remote MP3 on every notification.
@@ -113,6 +112,7 @@ let globalChannel: ReturnType<typeof supabase.channel> | null = null;
 let globalUserId: string | null = null;
 let globalCleanupFn: (() => void) | null = null;
 let activeConversationId: string | null = null;
+let pushListenersRegistered = false;
 
 export function setActiveConversationId(conversationId: string | null) {
   activeConversationId = conversationId;
@@ -224,7 +224,7 @@ export function initializeGlobalNotifications(
 
   // Handle Push Notifications for Mobile
   if (Capacitor.isNativePlatform()) {
-    registerPushNotifications(userId).catch(console.error);
+    void registerPushNotifications(userId);
   } else {
     // Request permission early for Web
     requestNotificationPermission().catch(() => { });
@@ -238,79 +238,115 @@ export function initializeGlobalNotifications(
 }
 
 async function registerPushNotifications(userId: string) {
-  let permStatus: PermissionStatus = await PushNotifications.checkPermissions();
-
-  if (permStatus.receive === "prompt") {
-    permStatus = await PushNotifications.requestPermissions();
-  }
-
-  if (permStatus.receive !== "granted") {
-    console.warn("User denied push notification permissions");
-    return;
-  }
-
-  // Create a default notification channel for Android
-  if (Capacitor.getPlatform() === 'android') {
-    await PushNotifications.createChannel({
-      id: 'gushu-priority-v1',
-      name: 'Gushu High Priority',
-      description: 'Important notifications that show over other apps',
-      importance: 5, // Max importance for heads-up
-      visibility: 1, // Public
-      sound: 'default',
-      vibration: true,
-    });
-  }
-
-  await PushNotifications.addListener("registration", async (token: Token) => {
-    console.log("Push registration success, token:", token.value);
-    
-    // Store token locally for cleanup on logout
-    localStorage.setItem("fcm_token", token.value);
-    
-    // Get device info
-    const info = await Device.getInfo();
-    
-    // Register token via RPC (Strictly no direct table access)
-    const { error } = await supabase.rpc("register_push_token" as any, {
-      p_token: token.value,
-      p_device_type: info.platform // 'android' or 'ios'
-    });
-
-    if (error) {
-      console.error("Error registering push token via RPC:", error);
-    }
-  });
-
-  await PushNotifications.addListener("registrationError", (error: any) => {
-    console.error("Error on registration: " + JSON.stringify(error));
-  });
-
-  await PushNotifications.addListener("pushNotificationReceived", (notification) => {
-    console.log("Push notification received: ", notification);
-    const conversationId = notification.data?.conversation_id as string | undefined;
-    if (conversationId && isConversationActive(conversationId)) {
+  try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || authData.user?.id !== userId) {
+      console.warn("[Push] FCM registration skipped: authenticated session is unavailable", authError);
       return;
     }
 
-    // On foreground, we might want to manually show a toast or sound
-    playNotificationSound();
-    toast(notification.title || "Gushu", {
-      description: notification.body || "New message!",
-    });
-  });
+    console.log("[Push] Initializing Firebase Messaging through Capacitor");
+    let permStatus = await PushNotifications.checkPermissions();
+    console.log("[Push] Notification permission status:", permStatus.receive);
 
-  await PushNotifications.addListener("pushNotificationActionPerformed", (notification) => {
-    console.log("Push notification action performed", notification.actionId, notification.notification);
-    const conversationId = notification.notification.data?.conversation_id;
-    if (conversationId) {
-      window.location.href = `/app/c/${conversationId}`;
+    if (permStatus.receive === "prompt") {
+      console.log("[Push] Requesting Android notification permission");
+      permStatus = await PushNotifications.requestPermissions();
+      console.log("[Push] Notification permission result:", permStatus.receive);
     }
-  });
 
-  // Native registration may complete immediately. Register listeners first so
-  // the FCM token cannot be lost before it is stored in Supabase.
-  await PushNotifications.register();
+    if (permStatus.receive !== "granted") {
+      console.warn("[Push] Notification permission denied; FCM registration skipped");
+      return;
+    }
+
+    if (Capacitor.getPlatform() === "android") {
+      await PushNotifications.createChannel({
+        id: "gushu-priority-v1",
+        name: "Gushu High Priority",
+        description: "Important notifications that show over other apps",
+        importance: 5,
+        visibility: 1,
+        sound: "default",
+        vibration: true,
+      });
+    }
+
+    if (!pushListenersRegistered) {
+      await PushNotifications.addListener("registration", (token: Token) => {
+        const previousToken = localStorage.getItem("fcm_token");
+        console.log(
+          previousToken && previousToken !== token.value
+            ? "[Push] FCM token refreshed"
+            : "[Push] FCM registration token received",
+        );
+        void savePushToken(userId, token.value);
+      });
+
+      await PushNotifications.addListener("registrationError", (error: unknown) => {
+        console.error("[Push] FCM registration error:", error);
+      });
+
+      await PushNotifications.addListener("pushNotificationReceived", (notification) => {
+        console.log("Push notification received: ", notification);
+        const conversationId = notification.data?.conversation_id as string | undefined;
+        if (conversationId && isConversationActive(conversationId)) return;
+
+        playNotificationSound();
+        toast(notification.title || "Gushu", {
+          description: notification.body || "New message!",
+        });
+      });
+
+      await PushNotifications.addListener("pushNotificationActionPerformed", (notification) => {
+        console.log("Push notification action performed", notification.actionId, notification.notification);
+        const conversationId = notification.notification.data?.conversation_id;
+        if (conversationId) window.location.href = `/app/c/${conversationId}`;
+      });
+
+      pushListenersRegistered = true;
+    }
+
+    console.log("[Push] Starting Firebase Messaging registration");
+    await PushNotifications.register();
+  } catch (error) {
+    console.error("[Push] FCM initialization or registration failed:", error);
+  }
+}
+
+async function savePushToken(userId: string, token: string) {
+  try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || authData.user?.id !== userId) {
+      console.warn("[Push] Token registration skipped: session changed or is unavailable", authError);
+      return;
+    }
+
+    const previousToken = localStorage.getItem("fcm_token");
+    if (previousToken && previousToken !== token) {
+      console.log("[Push] Removing previous FCM token before registering refreshed token");
+      const { data, error } = await supabase.rpc("unregister_push_token", {
+        p_token: previousToken,
+      });
+      console.log("[Push] unregister_push_token result:", { data, error });
+    }
+
+    console.log("[Push] Registering FCM token with Supabase");
+    const { data, error } = await supabase.rpc("register_push_token", {
+      p_token: token,
+      p_device_type: "android",
+    });
+    console.log("[Push] register_push_token result:", { data, error });
+
+    if (error || (Array.isArray(data) && data[0]?.success === false)) {
+      console.error("[Push] FCM token registration failed:", error ?? data);
+      return;
+    }
+
+    localStorage.setItem("fcm_token", token);
+  } catch (error) {
+    console.error("[Push] FCM token registration error:", error);
+  }
 }
 
 // Cleanup push notifications for this device on logout via RPC
@@ -320,22 +356,19 @@ export async function unregisterPushNotifications() {
   try {
     const token = localStorage.getItem("fcm_token");
     if (token) {
-      console.log("Unregistering push token via RPC:", token);
-      const { error } = await supabase.rpc("unregister_push_token" as any, {
-        p_token: token
+      console.log("[Push] Unregistering FCM token before logout");
+      const { data, error } = await supabase.rpc("unregister_push_token", {
+        p_token: token,
       });
-      
-      if (error) {
-        console.error("Error unregistering push token:", error);
-      }
-      
+      console.log("[Push] unregister_push_token result:", { data, error });
+      if (error) console.error("[Push] Error unregistering push token:", error);
       localStorage.removeItem("fcm_token");
     }
 
-    // Stop listening
     await PushNotifications.removeAllListeners();
-    console.log("Push notifications cleanup complete");
+    pushListenersRegistered = false;
+    console.log("[Push] Firebase Messaging listeners removed");
   } catch (error) {
-    console.error("Error in unregisterPushNotifications:", error);
+    console.error("[Push] Logout token cleanup failed:", error);
   }
 }
