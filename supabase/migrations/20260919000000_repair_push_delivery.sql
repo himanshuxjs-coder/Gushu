@@ -54,7 +54,7 @@ BEGIN
       body := jsonb_build_object(
         'token', token_record.token,
         'title', 'Gushu',
-        'body', 'Knock Knock',
+        'body', 'Knock Knock😙',
         'conversationId', NEW.conversation_id
       )
     );
