@@ -4,6 +4,10 @@ import { Capacitor } from '@capacitor/core';
 import { Device } from '@capacitor/device';
 import { supabase } from "@/integrations/supabase/client";
 
+// Bump this when an installed build must obtain a new FCM registration token.
+// The previous production token was rejected by FCM as UNREGISTERED.
+const PUSH_TOKEN_REGISTRATION_VERSION = "2026-09-19";
+
 export const usePushNotifications = (userId: string | undefined) => {
   useEffect(() => {
     if (!userId || !Capacitor.isNativePlatform()) return;
@@ -33,6 +37,13 @@ export const usePushNotifications = (userId: string | undefined) => {
           });
         }
 
+        // Recover once from revoked/stale FCM tokens. unregister() removes the
+        // native Firebase token; the following register() emits a fresh one.
+        if (localStorage.getItem("push_token_registration_version") !== PUSH_TOKEN_REGISTRATION_VERSION) {
+          await PushNotifications.unregister();
+          localStorage.removeItem("fcm_token");
+        }
+
         await PushNotifications.register();
       } catch (error) {
         console.error('Error registering push notifications:', error);
@@ -54,8 +65,6 @@ export const usePushNotifications = (userId: string | undefined) => {
       return;
     }
 
-    localStorage.setItem("fcm_token", token);
-
     const info = await Device.getInfo();
 
     const { data, error } = await supabase.rpc("register_push_token", {
@@ -73,7 +82,13 @@ export const usePushNotifications = (userId: string | undefined) => {
 
     if (data && Array.isArray(data) && !data[0]?.success) {
       console.error("RPC returned failure:", data[0].message);
+      return;
     }
+
+    if (error) return;
+
+    localStorage.setItem("fcm_token", token);
+    localStorage.setItem("push_token_registration_version", PUSH_TOKEN_REGISTRATION_VERSION);
   } catch (error) {
     console.error("saveToken failed:", error);
   }
