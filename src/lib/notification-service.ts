@@ -274,7 +274,7 @@ async function registerPushNotifications(userId: string) {
         description: "Important notifications that show over other apps",
         importance: 5,
         visibility: 1,
-        sound: "gushu_notification",
+        sound: "default",
         vibration: true,
       });
     }
