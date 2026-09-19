@@ -20,6 +20,16 @@ export const Route = createFileRoute("/_authenticated")({
       throw redirect({ to: "/auth", replace: true });
     }
 
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", userData.user.id)
+      .maybeSingle();
+    if (!profileError && !profile) {
+      await supabase.auth.signOut({ scope: "local" });
+      throw redirect({ to: "/auth", replace: true });
+    }
+
     return { user: userData.user };
   },
   component: AuthenticatedLayout,
