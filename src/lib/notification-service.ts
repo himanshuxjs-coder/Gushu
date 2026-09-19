@@ -374,8 +374,23 @@ async function savePushToken(userId: string, token: string) {
       } as never);
       console.log("[Push] register_push_token_v2 result:", JSON.stringify(fallback));
       if (fallback.error || (Array.isArray(fallback.data) && fallback.data[0]?.success === false)) {
-        console.error("[Push] FCM token registration failed:", fallback.error ?? fallback.data);
-        return;
+        console.warn("[Push] RPC fallback unavailable; trying authenticated token upsert");
+        const directRegistration = await supabase.from("user_push_tokens").upsert(
+          {
+            user_id: userId,
+            token,
+            device_type: "android",
+          },
+          { onConflict: "token" },
+        );
+        console.log(
+          "[Push] Direct user_push_tokens upsert result:",
+          JSON.stringify(directRegistration),
+        );
+        if (directRegistration.error) {
+          console.error("[Push] FCM token registration failed:", directRegistration.error);
+          return;
+        }
       }
     }
 
