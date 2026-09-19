@@ -97,7 +97,7 @@ export async function showPrivacyNotification(
     notification.onclick = () => {
       window.focus();
       notification.close();
-      window.location.href = `/app/c/${conversationId}`;
+      window.location.href = "/app";
     };
 
     return notification;
@@ -308,8 +308,9 @@ async function registerPushNotifications(userId: string) {
 
       await PushNotifications.addListener("pushNotificationActionPerformed", (notification) => {
         console.log("Push notification action performed", notification.actionId, notification.notification);
-        const conversationId = notification.notification.data?.conversation_id;
-        if (conversationId) window.location.href = `/app/c/${conversationId}`;
+        if (typeof window !== "undefined") {
+          window.location.href = "/app";
+        }
       });
 
       pushListenersRegistered = true;
