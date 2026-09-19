@@ -50,6 +50,11 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return permission === "granted";
 }
 
+function shouldSuppressNotificationForConversation(conversationId?: string | null): boolean {
+  if (!conversationId) return false;
+  return isConversationActive(conversationId);
+}
+
 // Show privacy-safe notification
 export async function showPrivacyNotification(
   conversationId: string,
@@ -61,7 +66,7 @@ export async function showPrivacyNotification(
   }
 ): Promise<Notification | null> {
   // Suppress notifications whenever the user is on a chat route
-  if (isConversationActive(conversationId)) {
+  if (shouldSuppressNotificationForConversation(conversationId)) {
     return null;
   }
 
@@ -296,6 +301,15 @@ async function registerPushNotifications(userId: string) {
 
       await PushNotifications.addListener("pushNotificationReceived", (notification) => {
         console.log("Push notification received: ", notification);
+        const conversationId =
+          (notification.data as Record<string, string | undefined> | undefined)?.conversation_id ??
+          (notification.notification?.data as Record<string, string | undefined> | undefined)?.conversation_id;
+
+        if (shouldSuppressNotificationForConversation(conversationId)) {
+          console.log("[Push] Suppressed native notification for active conversation:", conversationId);
+          return;
+        }
+
         playNotificationSound();
         toast(notification.title || "Gushu", {
           description: notification.body || "New message!",

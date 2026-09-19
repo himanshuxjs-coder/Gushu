@@ -29,6 +29,8 @@ import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebViewClient;
+import com.getcapacitor.BridgeWebChromeClient;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -119,8 +121,8 @@ public class MainActivity extends BridgeActivity {
         webView.setHapticFeedbackEnabled(false);
 
 
-        // Inject our client into the bridge's WebView
-        webView.setWebViewClient(new WebViewClient() {
+        // Inject Capacitor-compatible clients to preserve bridge functionality
+        webView.setWebViewClient(new BridgeWebViewClient(bridge) {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
@@ -132,6 +134,7 @@ public class MainActivity extends BridgeActivity {
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
                 // Only handle main frame failures (initial load or navigation)
                 if (request.isForMainFrame()) {
                     showOfflineScreen("Unable to connect", "Please check your internet connection and try again.");
@@ -140,6 +143,7 @@ public class MainActivity extends BridgeActivity {
 
             @Override
             public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
+                super.onReceivedHttpError(view, request, errorResponse);
                 if (request.isForMainFrame() && errorResponse.getStatusCode() >= 400) {
                     showOfflineScreen("Service Unavailable", "The Gushu server is currently unreachable. Please try again later.");
                 }
@@ -152,36 +156,7 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(final PermissionRequest request) {
-                pendingPermissionRequest = request;
-                String[] resources = request.getResources();
-                List<String> permissionsNeeded = new ArrayList<>();
-
-                for (String resource : resources) {
-                    if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
-                        permissionsNeeded.add(Manifest.permission.CAMERA);
-                    } else if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
-                        permissionsNeeded.add(Manifest.permission.RECORD_AUDIO);
-                    }
-                }
-
-                if (!permissionsNeeded.isEmpty()) {
-                    ActivityCompat.requestPermissions(MainActivity.this,
-                            permissionsNeeded.toArray(new String[0]), PERMISSIONS_REQUEST_CODE);
-                } else {
-                    request.grant(resources);
-                }
-            }
-
-            // For standard <input type="file"> or web photo captures, return maximum quality full-resolution files
-            @Override
-            public boolean onShowFileChooser(WebView webView, android.webkit.ValueCallback<android.net.Uri[]> filePathCallback, WebChromeClient.FileChooserParams fileChooserParams) {
-                return super.onShowFileChooser(webView, filePathCallback, fileChooserParams);
-            }
-        });
-
+        webView.setWebChromeClient(new BridgeWebChromeClient(bridge));
     }
 
     private void checkAndRequestStartupPermissions() {
