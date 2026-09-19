@@ -367,8 +367,16 @@ async function savePushToken(userId: string, token: string) {
     console.log("[Push] register_push_token result:", JSON.stringify({ data, error }));
 
     if (error || (Array.isArray(data) && data[0]?.success === false)) {
-      console.error("[Push] FCM token registration failed:", error ?? data);
-      return;
+      console.warn("[Push] register_push_token failed; trying refreshed RPC endpoint", error ?? data);
+      const fallback = await supabase.rpc("register_push_token_v2" as never, {
+        p_token: token,
+        p_device_type: "android",
+      } as never);
+      console.log("[Push] register_push_token_v2 result:", JSON.stringify(fallback));
+      if (fallback.error || (Array.isArray(fallback.data) && fallback.data[0]?.success === false)) {
+        console.error("[Push] FCM token registration failed:", fallback.error ?? fallback.data);
+        return;
+      }
     }
 
     localStorage.setItem("fcm_token", token);
