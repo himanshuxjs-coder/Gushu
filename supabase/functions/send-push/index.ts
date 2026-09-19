@@ -139,8 +139,7 @@ Deno.serve(async (req) => {
               priority: "HIGH",
               notification: {
                 channel_id: "gushu-priority-v1",
-                sound: "default",
-                default_sound: true,
+                sound: "gushu_notification",
                 default_vibrate_timings: true,
               },
             },
