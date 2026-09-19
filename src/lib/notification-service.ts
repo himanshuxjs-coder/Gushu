@@ -78,7 +78,7 @@ export async function showPrivacyNotification(
     toast(options?.title ?? "Gushu", {
       description: options?.body ?? "Knock Knock! 👀",
       action: {
-        label: "Open app",
+        label: "Open Karo",
         onClick: () => {
           window.location.href = "/app";
         },
@@ -307,6 +307,14 @@ async function registerPushNotifications(userId: string) {
 
       await PushNotifications.addListener("pushNotificationReceived", (notification) => {
         console.log("Push notification received: ", notification);
+
+        // While the app is open, realtime owns the in-app notification.
+        // Never show or play anything from the native push path in this state.
+        if (document.visibilityState === "visible") {
+          console.log("[Push] Ignored while app is visible; realtime handles in-app notification");
+          return;
+        }
+
         const conversationId =
           (notification.data as Record<string, string | undefined> | undefined)?.conversation_id ??
           (notification.notification?.data as Record<string, string | undefined> | undefined)?.conversation_id;
@@ -316,12 +324,6 @@ async function registerPushNotifications(userId: string) {
           return;
         }
 
-        // Realtime already shows the single in-app notification while visible.
-        // The FCM notification is reserved for Android background/killed delivery.
-        if (document.visibilityState === "visible") {
-          console.log("[Push] Foreground message handled by realtime notification");
-          return;
-        }
       });
 
       await PushNotifications.addListener("pushNotificationActionPerformed", (notification) => {
