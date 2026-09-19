@@ -73,9 +73,9 @@ export async function showPrivacyNotification(
     toast(options?.title ?? "Gushu", {
       description: options?.body ?? "Knock Knock! 👀",
       action: {
-        label: "View",
+        label: "Open app",
         onClick: () => {
-          window.location.href = `/app/c/${conversationId}`;
+          window.location.href = "/app";
         },
       },
     });
@@ -88,7 +88,6 @@ export async function showPrivacyNotification(
   try {
     const notification = new Notification("Gushu", {
       body: options?.body ?? "Knock Knock! 👀",
-      tag: options?.tag ?? conversationId,
       requireInteraction: options?.requireInteraction ?? false,
       silent: false, // We're playing our own sound too
       renotify: true,
@@ -97,7 +96,7 @@ export async function showPrivacyNotification(
     notification.onclick = () => {
       window.focus();
       notification.close();
-      window.location.href = `/app/c/${conversationId}`;
+      window.location.href = "/app";
     };
 
     return notification;
@@ -297,9 +296,6 @@ async function registerPushNotifications(userId: string) {
 
       await PushNotifications.addListener("pushNotificationReceived", (notification) => {
         console.log("Push notification received: ", notification);
-        const conversationId = notification.data?.conversation_id as string | undefined;
-        if (conversationId && isConversationActive(conversationId)) return;
-
         playNotificationSound();
         toast(notification.title || "Gushu", {
           description: notification.body || "New message!",
@@ -308,8 +304,7 @@ async function registerPushNotifications(userId: string) {
 
       await PushNotifications.addListener("pushNotificationActionPerformed", (notification) => {
         console.log("Push notification action performed", notification.actionId, notification.notification);
-        const conversationId = notification.notification.data?.conversation_id;
-        if (conversationId) window.location.href = `/app/c/${conversationId}`;
+        window.location.href = "/app";
       });
 
       pushListenersRegistered = true;

@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, error: "Method not allowed" }, { status: 405 });
     }
 
-    const { token, title, body, conversationId, conversation_id } = await req.json();
+    const { token, title, body } = await req.json();
     if (typeof token !== "string" || token.trim() === "") {
       return Response.json({ success: false, error: "A device token is required" }, { status: 400 });
     }
@@ -135,9 +135,6 @@ Deno.serve(async (req) => {
               title,
               body,
             },
-            data: (conversationId ?? conversation_id)
-              ? { conversation_id: String(conversationId ?? conversation_id) }
-              : undefined,
             android: {
               priority: "HIGH",
               notification: {

@@ -130,7 +130,7 @@ export const usePushNotifications = (userId: string | undefined) => {
 
       await PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
         console.log('Push notification action performed:', notification);
-        // You could navigate to the conversation here if notification.data.conversation_id exists
+        window.location.href = '/app';
       });
     };
 
