@@ -78,7 +78,7 @@ export async function showPrivacyNotification(
     toast(options?.title ?? "Gushu", {
       description: options?.body ?? "Knock Knock! 👀",
       action: {
-        label: "Open app",
+        label: "Open Karo",
         onClick: () => {
           window.location.href = "/app";
         },
@@ -124,6 +124,7 @@ let globalCleanupFn: (() => void) | null = null;
 let activeConversationId: string | null = null;
 let pushListenersRegistered = false;
 let pushRegistrationUserId: string | null = null;
+let pushVisibilityCleanup: (() => void) | null = null;
 
 export function setActiveConversationId(conversationId: string | null) {
   activeConversationId = conversationId;
@@ -339,6 +340,7 @@ async function registerPushNotifications(userId: string) {
       pushListenersRegistered = true;
     }
 
+    watchPushDeliveryVisibility(userId);
     console.log("[Push] Starting Firebase Messaging registration");
     await PushNotifications.register();
   } catch (error) {
@@ -375,6 +377,15 @@ async function savePushToken(userId: string, token: string) {
     }
 
     const previousToken = localStorage.getItem("fcm_token");
+    if (document.visibilityState === "visible") {
+      localStorage.setItem("fcm_token", token);
+      await removePushTokenFromServer(token);
+      if (previousToken && previousToken !== token) {
+        await removePushTokenFromServer(previousToken);
+      }
+      return;
+    }
+
     if (previousToken && previousToken !== token) {
       console.log("[Push] Removing previous FCM token before registering refreshed token");
       const { data, error } = await supabase.rpc("unregister_push_token", {
@@ -424,11 +435,48 @@ async function savePushToken(userId: string, token: string) {
   }
 }
 
+async function removePushTokenFromServer(token: string) {
+  const { data, error } = await supabase.rpc("unregister_push_token", {
+    p_token: token,
+  });
+  console.log("[Push] unregister_push_token result:", JSON.stringify({ data, error }));
+  if (error) console.error("[Push] Error unregistering push token:", error);
+}
+
+function watchPushDeliveryVisibility(userId: string) {
+  pushVisibilityCleanup?.();
+
+  const syncPushDelivery = () => {
+    const token = localStorage.getItem("fcm_token");
+    if (!token) return;
+
+    if (document.visibilityState === "visible") {
+      void removePushTokenFromServer(token);
+      return;
+    }
+
+    void savePushToken(userId, token);
+  };
+
+  document.addEventListener("visibilitychange", syncPushDelivery);
+  window.addEventListener("pageshow", syncPushDelivery);
+  window.addEventListener("pagehide", syncPushDelivery);
+  pushVisibilityCleanup = () => {
+    document.removeEventListener("visibilitychange", syncPushDelivery);
+    window.removeEventListener("pageshow", syncPushDelivery);
+    window.removeEventListener("pagehide", syncPushDelivery);
+    pushVisibilityCleanup = null;
+  };
+
+  syncPushDelivery();
+}
+
 // Cleanup push notifications for this device on logout via RPC
 export async function unregisterPushNotifications() {
   if (!Capacitor.isNativePlatform()) return;
 
   try {
+    pushVisibilityCleanup?.();
     const token = localStorage.getItem("fcm_token");
     if (token) {
       console.log("[Push] Unregistering FCM token before logout");
