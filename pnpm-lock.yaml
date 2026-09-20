@@ -113,6 +113,9 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.2.1
         version: 4.3.3(vite@7.3.6(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.51.2))
+      '@tanstack/query-core':
+        specifier: ^5.103.1
+        version: 5.103.1
       '@tanstack/react-query':
         specifier: ^5.83.0
         version: 5.103.1(react@19.3.0)
