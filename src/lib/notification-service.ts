@@ -124,6 +124,7 @@ let globalCleanupFn: (() => void) | null = null;
 let activeConversationId: string | null = null;
 let pushListenersRegistered = false;
 let pushRegistrationUserId: string | null = null;
+let pushRegistrationInFlightUserId: string | null = null;
 let pushVisibilityCleanup: (() => void) | null = null;
 
 export function setActiveConversationId(conversationId: string | null) {
@@ -250,10 +251,18 @@ export function initializeGlobalNotifications(
 }
 
 export function initializePushNotifications(userId: string) {
-  if (!Capacitor.isNativePlatform() || pushRegistrationUserId === userId) return;
+  if (
+    !Capacitor.isNativePlatform()
+    || pushRegistrationUserId === userId
+    || pushRegistrationInFlightUserId === userId
+  ) return;
 
-  pushRegistrationUserId = userId;
-  void registerPushNotifications(userId);
+  pushRegistrationInFlightUserId = userId;
+  void registerPushNotifications(userId).finally(() => {
+    if (pushRegistrationInFlightUserId === userId) {
+      pushRegistrationInFlightUserId = null;
+    }
+  });
 }
 
 async function registerPushNotifications(userId: string) {
@@ -343,6 +352,8 @@ async function registerPushNotifications(userId: string) {
     watchPushDeliveryVisibility(userId);
     console.log("[Push] Starting Firebase Messaging registration");
     await PushNotifications.register();
+    pushRegistrationUserId = userId;
+    console.log("[Push] Firebase Messaging registration started successfully");
   } catch (error) {
     console.error("[Push] FCM initialization or registration failed:", error);
   }
@@ -476,6 +487,7 @@ export async function unregisterPushNotifications() {
     await PushNotifications.removeAllListeners();
     pushListenersRegistered = false;
     pushRegistrationUserId = null;
+    pushRegistrationInFlightUserId = null;
     console.log("[Push] Firebase Messaging listeners removed");
   } catch (error) {
     console.error("[Push] Logout token cleanup failed:", error);
