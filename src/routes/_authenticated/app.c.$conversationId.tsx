@@ -1094,7 +1094,7 @@ function ChatPage() {
           <div
             ref={scrollRef}
             data-wallpaper={wallpaper}
-            className={cn("message-stream chat-wallpaper min-h-0 flex-1 overflow-y-auto px-4 py-6 pb-24 space-y-5 sm:px-8 no-scrollbar relative", wallpaperClass)}
+            className={cn("message-stream chat-wallpaper min-h-0 flex-1 overflow-y-auto scroll-pb-32 px-4 py-6 pb-32 space-y-5 sm:px-8 sm:pb-28 no-scrollbar relative", wallpaperClass)}
           >
             {msgs.isLoading && (
               <div className="grid h-full place-items-center text-muted-foreground">

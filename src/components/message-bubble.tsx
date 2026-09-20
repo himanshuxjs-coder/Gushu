@@ -397,7 +397,14 @@ export const MessageBubble = memo(function MessageBubble({
     <ContextMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
       <div className={cn("group relative flex items-center gap-2 w-full", mine ? "flex-row-reverse" : "flex-row")}>
         <ContextMenuTrigger asChild>
-          <div className={cn("w-full flex flex-col", mine ? "items-end" : "items-start")}>
+          <div
+            className={cn("w-full flex flex-col", mine ? "items-end" : "items-start")}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerEnd}
+            onPointerCancel={handlePointerCancel}
+            onContextMenu={handleContextMenu}
+          >
             {slideOffset !== 0 && (
               <div className={cn("absolute top-1/2 z-10 -translate-y-1/2 text-muted-foreground pointer-events-none", !mine ? "left-2" : "right-2")}>
                 <RotateCcw className="size-4 animate-pulse" />
@@ -456,11 +463,6 @@ export const MessageBubble = memo(function MessageBubble({
                     m.is_optimistic && "opacity-70 grayscale-[0.3]"
                   )}
                 style={{ transform: `translateX(${slideOffset}px)`, maxWidth: "100%", overflowWrap: "anywhere" }}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerEnd}
-                onPointerCancel={handlePointerCancel}
-                onContextMenu={handleContextMenu}
               >
                 {m.replied_message && (
                   <button
