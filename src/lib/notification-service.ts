@@ -277,7 +277,7 @@ async function registerPushNotifications(userId: string) {
     let permStatus = await PushNotifications.checkPermissions();
     console.log("[Push] Notification permission status:", permStatus.receive);
 
-    if (permStatus.receive === "prompt") {
+    if (permStatus.receive === "prompt" || permStatus.receive === "prompt-with-rationale") {
       console.log("[Push] Requesting Android notification permission");
       permStatus = await PushNotifications.requestPermissions();
       console.log("[Push] Notification permission result:", permStatus.receive);
