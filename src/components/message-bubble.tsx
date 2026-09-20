@@ -99,6 +99,7 @@ export const MessageBubble = memo(function MessageBubble({
   const touchStartXRef = useRef(0);
   const touchStartYRef = useRef(0);
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activePointerIdRef = useRef<number | null>(null);
   const longPressTriggeredRef = useRef(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const save = useServerFn(saveMessage);
@@ -164,6 +165,12 @@ export const MessageBubble = memo(function MessageBubble({
   useEffect(() => {
     setLocalReactions(m.reactions ?? []);
   }, [m.reactions]);
+
+  useEffect(() => {
+    return () => {
+      if (longPressRef.current) clearTimeout(longPressRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (savedCubeTimerRef.current) {
@@ -299,25 +306,31 @@ export const MessageBubble = memo(function MessageBubble({
     }
   }
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const clearLongPress = () => {
     if (longPressRef.current) clearTimeout(longPressRef.current);
-    touchStartXRef.current = e.touches[0].clientX;
-    touchStartYRef.current = e.touches[0].clientY;
+    longPressRef.current = null;
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.isPrimary || e.pointerType === "mouse") return;
+    clearLongPress();
+    activePointerIdRef.current = e.pointerId;
+    touchStartXRef.current = e.clientX;
+    touchStartYRef.current = e.clientY;
     longPressTriggeredRef.current = false;
+    e.currentTarget.setPointerCapture(e.pointerId);
     longPressRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true;
       setContextMenuOpen(true);
     }, 500);
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    const dx = e.touches[0].clientX - touchStartXRef.current;
-    const dy = e.touches[0].clientY - touchStartYRef.current;
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerId !== activePointerIdRef.current) return;
+    const dx = e.clientX - touchStartXRef.current;
+    const dy = e.clientY - touchStartYRef.current;
     if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
-      if (longPressRef.current) {
-        clearTimeout(longPressRef.current);
-        longPressRef.current = null;
-      }
+      clearLongPress();
     }
     if (Math.abs(dx) > Math.abs(dy)) {
       if (!mine && dx > 0) setSlideOffset(Math.min(dx, 60));
@@ -325,24 +338,24 @@ export const MessageBubble = memo(function MessageBubble({
     }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (longPressRef.current) {
-      clearTimeout(longPressRef.current);
-      longPressRef.current = null;
-    }
-    const dx = e.changedTouches[0].clientX - touchStartXRef.current;
-    const dy = e.changedTouches[0].clientY - touchStartYRef.current;
+  const handlePointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerId !== activePointerIdRef.current) return;
+    clearLongPress();
+    const dx = e.clientX - touchStartXRef.current;
+    const dy = e.clientY - touchStartYRef.current;
     if (!longPressTriggeredRef.current && Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
       onReply?.(m);
     }
     setSlideOffset(0);
+    activePointerIdRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
   };
 
-  const handleTouchCancel = () => {
-    if (longPressRef.current) {
-      clearTimeout(longPressRef.current);
-      longPressRef.current = null;
-    }
+  const handlePointerCancel = () => {
+    clearLongPress();
+    activePointerIdRef.current = null;
     longPressTriggeredRef.current = false;
     setSlideOffset(0);
   };
@@ -434,10 +447,10 @@ export const MessageBubble = memo(function MessageBubble({
                     m.is_optimistic && "opacity-70 grayscale-[0.3]"
                   )}
                 style={{ transform: `translateX(${slideOffset}px)`, maxWidth: "100%", overflowWrap: "anywhere" }}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-                onTouchCancel={handleTouchCancel}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerEnd}
+                onPointerCancel={handlePointerCancel}
               >
                 {m.replied_message && (
                   <button
