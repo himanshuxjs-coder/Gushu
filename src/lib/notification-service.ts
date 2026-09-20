@@ -277,7 +277,7 @@ async function registerPushNotifications(userId: string) {
     let permStatus = await PushNotifications.checkPermissions();
     console.log("[Push] Notification permission status:", permStatus.receive);
 
-    if (permStatus.receive === "prompt" || permStatus.receive === "prompt-with-rationale") {
+    if (permStatus.receive === "prompt") {
       console.log("[Push] Requesting Android notification permission");
       permStatus = await PushNotifications.requestPermissions();
       console.log("[Push] Notification permission result:", permStatus.receive);
@@ -337,7 +337,8 @@ async function registerPushNotifications(userId: string) {
       await PushNotifications.addListener("pushNotificationActionPerformed", (notification) => {
         console.log("Push notification action performed", notification.actionId, notification.notification);
         const conversationId =
-          (notification.notification?.data as Record<string, string | undefined> | undefined)?.conversation_id;
+          (notification.notification?.data as Record<string, string | undefined> | undefined)?.conversation_id ??
+          (notification.data as Record<string, string | undefined> | undefined)?.conversation_id;
         if (conversationId) {
           window.location.href = `/app/c/${conversationId}`;
           return;
