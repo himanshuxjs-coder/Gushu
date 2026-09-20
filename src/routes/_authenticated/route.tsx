@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { initializePushNotifications } from "@/lib/notification-service";
 import { useServerFn } from "@tanstack/react-start";
-import { updatePresence } from "@/lib/presence.functions";
+import { markPresenceInactive, updatePresence } from "@/lib/presence.functions";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -40,6 +40,7 @@ function AuthenticatedLayout() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const updatePresenceFn = useServerFn(updatePresence);
+  const markPresenceInactiveFn = useServerFn(markPresenceInactive);
 
   useEffect(() => {
     initializePushNotifications(user.id);
@@ -59,19 +60,28 @@ function AuthenticatedLayout() {
     const intervalId = setInterval(beat, 30_000);
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") beat();
+      if (document.visibilityState === "visible") {
+        beat();
+      } else {
+        void markPresenceInactiveFn({ data: undefined });
+      }
     };
     const onFocus = () => beat();
+    const onPageHide = () => {
+      void markPresenceInactiveFn({ data: undefined });
+    };
 
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
+    window.addEventListener("pagehide", onPageHide);
 
     return () => {
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pagehide", onPageHide);
     };
-  }, [user?.id, updatePresenceFn]);
+  }, [markPresenceInactiveFn, updatePresenceFn, user?.id]);
 
   useEffect(() => {
     const resumeApp = () => {

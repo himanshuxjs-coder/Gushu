@@ -337,8 +337,7 @@ async function registerPushNotifications(userId: string) {
       await PushNotifications.addListener("pushNotificationActionPerformed", (notification) => {
         console.log("Push notification action performed", notification.actionId, notification.notification);
         const conversationId =
-          (notification.notification?.data as Record<string, string | undefined> | undefined)?.conversation_id ??
-          (notification.data as Record<string, string | undefined> | undefined)?.conversation_id;
+          (notification.notification?.data as Record<string, string | undefined> | undefined)?.conversation_id;
         if (conversationId) {
           window.location.href = `/app/c/${conversationId}`;
           return;

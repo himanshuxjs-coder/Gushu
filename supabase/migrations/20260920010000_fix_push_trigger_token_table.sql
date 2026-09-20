@@ -33,6 +33,14 @@ BEGIN
         ),
         true
       )
+      -- The authenticated app updates profiles.last_seen_at every 30 seconds.
+      -- Realtime handles the in-app alert while this heartbeat is fresh.
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.profiles AS recipient_profile
+        WHERE recipient_profile.id = upt.user_id
+          AND recipient_profile.last_seen_at > now() - interval '60 seconds'
+      )
       AND NOT EXISTS (
         SELECT 1
         FROM public.active_conversations AS active_conversation

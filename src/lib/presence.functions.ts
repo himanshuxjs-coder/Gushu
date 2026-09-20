@@ -19,6 +19,17 @@ export const updatePresence = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const markPresenceInactive = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { error } = await context.supabase
+      .from("profiles")
+      .update({ last_seen_at: null })
+      .eq("id", context.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 export const setTyping = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: unknown) => z.object({ conversationId: z.string().uuid() }).parse(input))
