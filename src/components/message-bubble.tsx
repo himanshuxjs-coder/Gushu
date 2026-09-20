@@ -100,6 +100,7 @@ export const MessageBubble = memo(function MessageBubble({
   const touchStartYRef = useRef(0);
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
+  const lastPointerTypeRef = useRef<React.PointerEvent<HTMLDivElement>["pointerType"] | null>(null);
   const longPressTriggeredRef = useRef(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const save = useServerFn(saveMessage);
@@ -315,6 +316,7 @@ export const MessageBubble = memo(function MessageBubble({
     if (!e.isPrimary || e.pointerType === "mouse") return;
     clearLongPress();
     activePointerIdRef.current = e.pointerId;
+    lastPointerTypeRef.current = e.pointerType;
     touchStartXRef.current = e.clientX;
     touchStartYRef.current = e.clientY;
     longPressTriggeredRef.current = false;
@@ -356,8 +358,15 @@ export const MessageBubble = memo(function MessageBubble({
   const handlePointerCancel = () => {
     clearLongPress();
     activePointerIdRef.current = null;
-    longPressTriggeredRef.current = false;
     setSlideOffset(0);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (lastPointerTypeRef.current !== "touch" && lastPointerTypeRef.current !== "pen") return;
+    e.preventDefault();
+    clearLongPress();
+    longPressTriggeredRef.current = true;
+    setContextMenuOpen(true);
   };
 
   const reactionCounts: Record<string, number> = {};
@@ -451,6 +460,7 @@ export const MessageBubble = memo(function MessageBubble({
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerEnd}
                 onPointerCancel={handlePointerCancel}
+                onContextMenu={handleContextMenu}
               >
                 {m.replied_message && (
                   <button
