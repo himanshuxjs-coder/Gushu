@@ -377,15 +377,6 @@ async function savePushToken(userId: string, token: string) {
     }
 
     const previousToken = localStorage.getItem("fcm_token");
-    if (document.visibilityState === "visible") {
-      localStorage.setItem("fcm_token", token);
-      await removePushTokenFromServer(token);
-      if (previousToken && previousToken !== token) {
-        await removePushTokenFromServer(previousToken);
-      }
-      return;
-    }
-
     if (previousToken && previousToken !== token) {
       console.log("[Push] Removing previous FCM token before registering refreshed token");
       const { data, error } = await supabase.rpc("unregister_push_token", {
@@ -397,7 +388,7 @@ async function savePushToken(userId: string, token: string) {
     console.log("[Push] Registering FCM token with Supabase");
     const { data, error } = await supabase.rpc("register_push_token", {
       p_token: token,
-      p_device_type: "android",
+      p_device_type: Capacitor.getPlatform() === "ios" ? "ios" : "android",
     });
     console.log("[Push] register_push_token result:", JSON.stringify({ data, error }));
 
@@ -405,7 +396,7 @@ async function savePushToken(userId: string, token: string) {
       console.warn("[Push] register_push_token failed; trying refreshed RPC endpoint", error ?? data);
       const fallback = await supabase.rpc("register_push_token_v2" as never, {
         p_token: token,
-        p_device_type: "android",
+        p_device_type: Capacitor.getPlatform() === "ios" ? "ios" : "android",
       } as never);
       console.log("[Push] register_push_token_v2 result:", JSON.stringify(fallback));
       if (fallback.error || (Array.isArray(fallback.data) && fallback.data[0]?.success === false)) {
@@ -414,7 +405,7 @@ async function savePushToken(userId: string, token: string) {
           {
             user_id: userId,
             token,
-            device_type: "android",
+            device_type: Capacitor.getPlatform() === "ios" ? "ios" : "android",
           },
           { onConflict: "token" },
         );
@@ -449,12 +440,6 @@ function watchPushDeliveryVisibility(userId: string) {
   const syncPushDelivery = () => {
     const token = localStorage.getItem("fcm_token");
     if (!token) return;
-
-    if (document.visibilityState === "visible") {
-      void removePushTokenFromServer(token);
-      return;
-    }
-
     void savePushToken(userId, token);
   };
 
