@@ -384,10 +384,13 @@ function ChatPage() {
     initialScrollDoneRef.current = false;
   }, [conversationId]);
 
-  const unreadMessageCount = useMemo(
-    () => (msgs.data ?? []).filter((message: any) => message.sender_id !== meId && !hasSeenReceipt(message)).length,
+  const unreadMessages = useMemo(
+    () => (msgs.data ?? []).filter((message: any) => message.sender_id !== meId && !hasSeenReceipt(message)),
     [hasSeenReceipt, meId, msgs.data],
   );
+
+  const unreadMessageCount = unreadMessages.length;
+  const firstUnreadMessage = unreadMessages[0] ?? null;
 
   const isChatActuallyViewed = useCallback(() => {
     const el = scrollRef.current;
@@ -956,15 +959,17 @@ function ChatPage() {
 
     if (!initialScrollDoneRef.current) {
       initialScrollDoneRef.current = true;
-      if (firstUnreadIndex !== -1) {
-        const targetId = visible[firstUnreadIndex].id;
+
+      if (firstUnreadMessage) {
+        const targetId = firstUnreadMessage.id;
         const msgEl = el.querySelector(`[data-msg-id="${targetId}"]`) as HTMLElement | null;
         if (msgEl) {
-          el.scrollTo({ top: msgEl.offsetTop - 20, behavior: "auto" });
+          el.scrollTo({ top: msgEl.offsetTop - 24, behavior: "auto" });
           return;
         }
       }
-      // Fallback: scroll to bottom
+
+      // If there are no unread messages, enter on the latest message.
       el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
       return;
     }
@@ -1348,6 +1353,7 @@ function ChatPage() {
             {(() => {
               const filtered = visibleMessages;
               const firstUnreadIndex = filtered.findIndex((m: any) => m.sender_id !== meId && !hasSeenReceipt(m));
+              const shouldShowNewMessagesDivider = unreadMessageCount > 3 && firstUnreadIndex !== -1;
 
               let prevDate: Date | null = null;
               return filtered.map((m: any, idx: number) => {
@@ -1368,10 +1374,12 @@ function ChatPage() {
                 return (
                   <div key={m.id} data-msg-id={m.id}>
                     {showDateSeparator && <DateSeparator date={currentDate} />}
-                    {/* Insert a WhatsApp-style "New messages" divider before the first unread message */}
-                    {idx === firstUnreadIndex && (
+                    {/* Divider for a larger unread block so the user can catch up without losing context. */}
+                    {idx === firstUnreadIndex && shouldShowNewMessagesDivider && (
                       <div className="flex justify-center my-3">
-                        <span className="px-4 py-1.5 bg-emerald-600 text-white text-[12px] rounded-full font-semibold shadow-sm">New messages</span>
+                        <span className="px-4 py-1.5 bg-emerald-600 text-white text-[12px] rounded-full font-semibold shadow-sm">
+                          {unreadMessageCount} new messages
+                        </span>
                       </div>
                     )}
                     <div
