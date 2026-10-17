@@ -11,12 +11,29 @@ export const Route = createFileRoute("/")({
 function Index() {
   const [target, setTarget] = useState<string | null>(null);
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      // Small delay for aesthetic splash experience
-      setTimeout(() => {
+    let active = true;
+    const fallbackTimer = window.setTimeout(() => {
+      if (active) setTarget("/auth");
+    }, 8000);
+
+    supabase.auth.getSession()
+      .then(({ data, error }) => {
+        if (!active) return;
+        window.clearTimeout(fallbackTimer);
+        if (error) console.warn("Could not restore the saved session:", error);
         setTarget(data.session ? "/app" : "/auth");
-      }, 1000);
-    });
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        window.clearTimeout(fallbackTimer);
+        console.warn("Could not restore the saved session:", error);
+        setTarget("/auth");
+      });
+
+    return () => {
+      active = false;
+      window.clearTimeout(fallbackTimer);
+    };
   }, []);
 
   if (!target) {
