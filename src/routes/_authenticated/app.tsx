@@ -172,7 +172,7 @@ function AppShell() {
     refetchInterval: () => {
       if (typeof document === "undefined") return false;
       if (document.visibilityState === "hidden") return false;
-      return 15_000;
+      return 5_000;
     },
     refetchIntervalInBackground: false,
   });

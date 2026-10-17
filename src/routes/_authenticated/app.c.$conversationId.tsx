@@ -262,7 +262,7 @@ function ChatPage() {
     refetchInterval: () => {
       if (typeof document === "undefined") return false;
       if (document.visibilityState === "hidden") return false;
-      return 10_000;
+      return 2_000;
     },
     refetchIntervalInBackground: false,
   });
@@ -413,6 +413,21 @@ function ChatPage() {
     const messageRect = messageEl.getBoundingClientRect();
     return messageRect.bottom > paneRect.top && messageRect.top < paneRect.bottom;
   }, [hasSeenReceipt, isMobile, meId, msgs.data]);
+
+  useEffect(() => {
+    if (!conversationId || typeof document === "undefined") return;
+    if (document.visibilityState !== "visible") return;
+
+    const refreshActiveChat = () => {
+      void queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ["conv-settings", conversationId] });
+    };
+
+    refreshActiveChat();
+    const intervalId = window.setInterval(refreshActiveChat, 2000);
+    return () => window.clearInterval(intervalId);
+  }, [conversationId, queryClient]);
 
   useEffect(() => {
     if (!conversationId) return;
