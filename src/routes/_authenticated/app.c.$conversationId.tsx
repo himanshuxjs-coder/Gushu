@@ -1376,11 +1376,13 @@ function ChatPage() {
                     )}
                     <div
                       className={cn(
-                        "[content-visibility:auto] [contain-intrinsic-size:0_88px]",
-                        idx < 3 && "animate-in-fade",
-                        idx < 3 && `stagger-${idx + 1}`,
+                        "[content-visibility:auto] [contain-intrinsic-size:0_88px] animate-message-entry",
+                        idx < 3 && "stagger-1",
                       )}
-                      style={{ contain: "layout paint style" }}
+                      style={{
+                        contain: "layout paint style",
+                        animationDelay: `${Math.min(idx, 9) * 18}ms`,
+                      }}
                     >
                       <MessageBubble
                         m={m as any}
