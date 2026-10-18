@@ -262,7 +262,7 @@ function ChatPage() {
     refetchInterval: () => {
       if (typeof document === "undefined") return false;
       if (document.visibilityState === "hidden") return false;
-      return 10_000;
+      return 2_500;
     },
     refetchIntervalInBackground: false,
   });
