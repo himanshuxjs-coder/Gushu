@@ -808,8 +808,26 @@ function ChatPage() {
   }, [conversationId, msgs.data, isLocked, isHiddenLocked, meId, isChatActuallyViewed, markSeenNow]);
 
   useEffect(() => {
+    const refreshVisibleChat = async () => {
+      if (!conversationId || document.visibilityState !== "visible" || !document.hasFocus()) {
+        return;
+      }
+
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["messages", conversationId] }),
+        queryClient.refetchQueries({ queryKey: ["conversation", conversationId] }),
+        queryClient.refetchQueries({ queryKey: ["conv-settings", conversationId] }),
+        queryClient.refetchQueries({ queryKey: ["conversations"] }),
+      ]);
+
+      if (msgs.data?.length) {
+        void markSeenNow();
+      }
+    };
+
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && document.hasFocus() && isChatActuallyViewed()) {
+      if (document.visibilityState === "visible" && document.hasFocus()) {
+        void refreshVisibleChat();
         if (markReadTimeoutRef.current) {
           clearTimeout(markReadTimeoutRef.current);
         }
@@ -822,6 +840,7 @@ function ChatPage() {
 
     const handleWindowFocus = () => {
       if (!isChatActuallyViewed()) return;
+      void refreshVisibleChat();
       if (markReadTimeoutRef.current) {
         clearTimeout(markReadTimeoutRef.current);
       }
@@ -831,14 +850,20 @@ function ChatPage() {
       initialMessagesLoadedRef.current = true;
     };
 
+    const handleOnline = () => {
+      void refreshVisibleChat();
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener("online", handleOnline);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener("online", handleOnline);
     };
-  }, [isChatActuallyViewed, markSeenNow]);
+  }, [conversationId, isChatActuallyViewed, markSeenNow, msgs.data, queryClient]);
 
   const waitForRender = useCallback(() => {
     return new Promise<void>((resolve) => {
