@@ -1,63 +1,38 @@
 import { supabase } from "@/integrations/supabase/client";
 
-const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000];
-
 /**
- * Subscribe to a channel and request a fresh server snapshot after the channel
- * successfully rejoins. Supabase Realtime manages WebSocket reconnections; the
- * callback here is a recovery signal for app-level missed events.
+ * Subscribe once and use Supabase Realtime's built-in WebSocket/channel
+ * recovery. Re-subscribing the same channel from a timer can race the SDK's
+ * own rejoin logic and create confusing subscription states.
  *
- * Note: callers must still remove the returned channel in their effect cleanup.
+ * onReconnect runs only after a channel has left SUBSCRIBED and successfully
+ * returns to SUBSCRIBED, allowing callers to reconcile any missed database
+ * events with a fresh query.
  */
 export function subscribeWithReconnect(
   channel: ReturnType<typeof supabase.channel>,
   onReconnect?: () => void,
 ): ReturnType<typeof supabase.channel> {
-  let attempt = 0;
-  let retryTimer: ReturnType<typeof setTimeout> | undefined;
-  let disposed = false;
   let lastStatus: string | undefined;
 
-  const statusCallback = (status: string, err?: Error) => {
-    if (disposed) return;
-
+  channel.subscribe((status: string, err?: Error) => {
     if (status === "SUBSCRIBED") {
-      const wasReconnect = lastStatus !== undefined && lastStatus !== "SUBSCRIBED";
-      attempt = 0;
+      const recovered = lastStatus !== undefined && lastStatus !== "SUBSCRIBED";
+      if (recovered) {
+        console.info("[Gushu Realtime] channel recovered; syncing missed updates");
+        onReconnect?.();
+      } else {
+        console.info("[Gushu Realtime] channel subscribed");
+      }
       lastStatus = status;
-      if (wasReconnect) onReconnect?.();
       return;
     }
 
+    lastStatus = status;
     if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-      lastStatus = status;
-      if (err) console.error("[Gushu Realtime] subscription status:", status, err);
-
-      // Don't create a timer storm if the SDK emits multiple error statuses.
-      if (retryTimer) return;
-
-      const delay = RECONNECT_DELAYS[Math.min(attempt, RECONNECT_DELAYS.length - 1)];
-      attempt += 1;
-
-      retryTimer = setTimeout(() => {
-        retryTimer = undefined;
-        if (disposed) return;
-
-        // Re-subscribe only after a channel-level failure. Supabase's client
-        // handles normal WebSocket reconnection itself.
-        try {
-          channel.subscribe(statusCallback);
-        } catch (retryError) {
-          console.error("[Gushu Realtime] retry failed:", retryError);
-        }
-      }, delay);
+      console.warn("[Gushu Realtime] channel status:", status, err ?? "");
     }
-  };
+  });
 
-  channel.subscribe(statusCallback);
-
-  // Return the actual Supabase channel for existing call-site compatibility.
-  // Cleanup remains via supabase.removeChannel(channel), which stops the
-  // underlying channel. Any queued retry is harmless after CLOSED.
   return channel;
 }
