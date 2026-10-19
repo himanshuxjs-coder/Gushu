@@ -27,6 +27,13 @@ export function PinDialog({ open, title, description, onSubmit, onCancel, errorM
 
   const digits = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
 
+  useEffect(() => {
+    if (open) {
+      setPin("");
+      setError(null);
+    }
+  }, [open]);
+
   const press = async (d: string) => {
     if (loading) return;
     if (d === "⌫") {
@@ -109,11 +116,12 @@ export function PinDialog({ open, title, description, onSubmit, onCancel, errorM
             <button
               key={i}
               onClick={() => press(d)}
-              disabled={loading}
+              disabled={loading || !d}
+              aria-label={d === "⌫" ? "Delete last digit" : d ? `Enter digit ${d}` : undefined}
               className={cn(
                 "flex h-14 items-center justify-center rounded-xl text-lg font-medium transition-all active:scale-95",
                 d === ""
-                  ? "pointer-events-none"
+                  ? "pointer-events-none opacity-0"
                   : d === "⌫"
                     ? "text-muted-foreground hover:bg-muted"
                     : "bg-muted hover:bg-muted/70 text-foreground",
@@ -131,7 +139,7 @@ export function PinDialog({ open, title, description, onSubmit, onCancel, errorM
         </div>
 
         {onCancel && (
-          <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={onCancel}>
+          <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={onCancel} disabled={loading}>
             Cancel
           </Button>
         )}
