@@ -178,6 +178,35 @@ function AppShell() {
     refetchIntervalInBackground: false,
   });
 
+  // Reconcile the inbox when a suspended tab/app becomes active again.
+  // Realtime is not a durable message queue, so missed events must be fetched from Postgres.
+  useEffect(() => {
+    let syncTimer: ReturnType<typeof setTimeout> | null = null;
+    const syncInboxOnReturn = () => {
+      if (document.visibilityState !== "visible") return;
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        void queryClient.invalidateQueries({
+          queryKey: ["conversations"],
+          exact: true,
+          refetchType: "active",
+        });
+      }, 150);
+    };
+
+    document.addEventListener("visibilitychange", syncInboxOnReturn);
+    window.addEventListener("pageshow", syncInboxOnReturn);
+    window.addEventListener("focus", syncInboxOnReturn);
+    window.addEventListener("online", syncInboxOnReturn);
+    return () => {
+      if (syncTimer) clearTimeout(syncTimer);
+      document.removeEventListener("visibilitychange", syncInboxOnReturn);
+      window.removeEventListener("pageshow", syncInboxOnReturn);
+      window.removeEventListener("focus", syncInboxOnReturn);
+      window.removeEventListener("online", syncInboxOnReturn);
+    };
+  }, [queryClient]);
+
   useEffect(() => {
     if (!meId) return;
     let cancelled = false;
