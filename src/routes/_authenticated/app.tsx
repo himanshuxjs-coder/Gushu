@@ -218,7 +218,7 @@ function AppShell() {
         const message = payload.new as any;
         if (!message) return;
         const activeConversationId = typeof window !== "undefined"
-          ? window.location.pathname.match(/\\/app\\/c\\/([^/?#]+)/)?.[1]
+          ? window.location.pathname.match(/\/app\/c\/([^/?#]+)/)?.[1]
           : null;
         queryClient.setQueryData(["conversations"], (old: any) => {
           if (!Array.isArray(old)) return old;
