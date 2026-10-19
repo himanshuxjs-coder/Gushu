@@ -738,10 +738,8 @@ function ChatPage() {
             );
           });
 
-          if (msg.sender_id === meId || isNearBottomRef.current || !userScrolledUpRef.current) {
-            requestAnimationFrame(() => animateScrollToBottom());
-            window.setTimeout(() => animateScrollToBottom(), 120);
-          }
+          // The message-list effect handles follow-to-latest after React commits
+          // the new row. Avoid starting duplicate scroll animations here.
         },
       )
       .on(
@@ -1110,7 +1108,7 @@ function ChatPage() {
 
     isAnimatingScrollRef.current = true;
 
-    const duration = Math.min(520, Math.max(260, Math.abs(distance) * 0.4));
+    const duration = Math.min(320, Math.max(160, Math.abs(distance) * 0.3));
     const startTime = performance.now();
     const ease = (t: number) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t);
 
@@ -1208,7 +1206,6 @@ function ChatPage() {
 
     if ((isNearBottom || shouldFollowNewMessage) && !userScrolledUpRef.current) {
       requestAnimationFrame(() => animateScrollToBottom());
-      window.setTimeout(() => animateScrollToBottom(), 120);
     }
   }, [animateScrollToBottom, firstUnreadMessage, meId, newMessagesSeparator, visibleMessages]);
 
