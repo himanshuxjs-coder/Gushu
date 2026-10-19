@@ -286,26 +286,53 @@ function ChatPage() {
     refetchOnReconnect: false,
   });
 
-  // Refresh the chat once every time this conversation screen is entered.
-  // Existing cached messages remain visible; temporary skeleton bubbles show during the request.
+  // On chat entry, fetch only messages newer than the newest cached message.
+  // Update the message cache in place; never reload the whole page.
   useEffect(() => {
     let cancelled = false;
     setRefreshingOnEntry(true);
 
-    void queryClient
-      .invalidateQueries({
-        queryKey: ["messages", conversationId],
-        exact: true,
-        refetchType: "active",
-      })
-      .finally(() => {
-        if (!cancelled) setRefreshingOnEntry(false);
-      });
+    const syncNewMessages = async () => {
+      try {
+        const cached = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
+        if (cached.length === 0) {
+          await queryClient.refetchQueries({
+            queryKey: ["messages", conversationId],
+            exact: true,
+            type: "active",
+          });
+          return;
+        }
 
+        let cursor: string | undefined = cached[cached.length - 1]?.created_at;
+        const incoming: any[] = [];
+
+        while (cursor) {
+          const page = await listMsgs({
+            data: { conversationId, afterCreatedAt: cursor, limit: MESSAGE_PAGE_SIZE },
+          });
+          incoming.push(...page.messages);
+          if (!page.hasMoreOlder || !page.nextBeforeCreatedAt || page.messages.length === 0) break;
+          cursor = page.nextBeforeCreatedAt;
+        }
+
+        if (!cancelled && incoming.length > 0) {
+          queryClient.setQueryData<any[]>(["messages", conversationId], (current) =>
+            mergeMessages(current ?? cached, incoming),
+          );
+        }
+      } catch {
+        // Keep existing messages on screen if the request fails.
+      } finally {
+        if (!cancelled) setRefreshingOnEntry(false);
+      }
+    };
+
+    void syncNewMessages();
     return () => {
       cancelled = true;
     };
-  }, [conversationId, queryClient]);
+  }, [conversationId, listMsgs, queryClient]);
 
   // Fetch only missed messages when the app returns or connectivity is restored.
   // No timer/polling: normal incoming messages are inserted by the Realtime callback.
