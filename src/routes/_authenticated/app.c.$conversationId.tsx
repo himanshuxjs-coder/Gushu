@@ -1605,12 +1605,12 @@ function ChatPage() {
                 {loadingOlder ? "Loading earlier messages..." : "Load earlier messages"}
               </button>
             )}
-            {msgs.isLoading && (
+            {msgs.isLoading && !msgs.data?.length && (
               <div className="grid h-full place-items-center text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
               </div>
             )}
-            {refreshingOnEntry && (
+            {refreshingOnEntry && !msgs.data?.length && !msgs.isLoading && (
               <div className="space-y-4" aria-label="Refreshing messages" aria-live="polite">
                 {[0, 1, 2].map((item) => (
                   <div
@@ -1682,8 +1682,8 @@ function ChatPage() {
                     )}
                     <div
                       className={cn(
-                        "[content-visibility:auto] [contain-intrinsic-size:0_88px] animate-message-entry",
-                        idx < 3 && "stagger-1",
+                        "[content-visibility:auto] [contain-intrinsic-size:0_88px]",
+                        idx === visibleMessages.length - 1 && "animate-message-entry",
                       )}
                       style={{
                         contain: "layout paint style",
