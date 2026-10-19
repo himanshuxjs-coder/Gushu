@@ -189,7 +189,7 @@ export function UserSearch() {
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="............😁"
+          placeholder=".......😁"
           className="h-9 rounded-full bg-muted/40 pl-9 text-xs ring-1 ring-border focus-visible:ring-foreground/30"
         />
         {open && q.trim() && (
