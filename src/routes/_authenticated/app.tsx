@@ -165,8 +165,8 @@ function AppShell() {
     },
     enabled: meQuery.isSuccess && !!me,
     retry: 2,
-    staleTime: 30000,
-    gcTime: 300000,
+    staleTime: 60000,
+    gcTime: 30 * 60_000,
     // The inbox is updated by Realtime and reconciled only on resume/reconnect.
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
