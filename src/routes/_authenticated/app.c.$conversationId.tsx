@@ -172,8 +172,13 @@ function ChatPage() {
   const showNewMessagesSeparator = useCallback((messages: any[]) => {
     const incoming = messages
       .filter((message: any) => message.sender_id !== meId && message.message_type !== "system")
-      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    if (!incoming.length || otherIsViewingRef.current) return;
+      .sort((a: any, b: any) => {
+        const timeDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        return timeDiff || String(a.id).localeCompare(String(b.id));
+      });
+    // Messages returned by catch-up were absent locally. Do not suppress this
+    // marker based on potentially stale remote-presence information.
+    if (!incoming.length) return;
 
     if (newMessagesTimerRef.current) clearTimeout(newMessagesTimerRef.current);
     setNewMessagesSeparator({ firstMessageId: incoming[0].id, count: incoming.length });
@@ -261,6 +266,7 @@ function ChatPage() {
         const previous = queryClient.getQueryData<any>(["messages", conversationId]) ?? [];
         const isIncremental = previous.length > 0;
         let cursor = isIncremental ? previous[previous.length - 1]?.created_at : undefined;
+        let cursorId = isIncremental ? previous[previous.length - 1]?.id : undefined;
         let incoming: any[] = [];
         let page: any;
 
@@ -271,12 +277,13 @@ function ChatPage() {
             data: {
               conversationId,
               limit: MESSAGE_PAGE_SIZE,
-              ...(cursor ? { afterCreatedAt: cursor } : {}),
+              ...(cursor ? { afterCreatedAt: cursor, ...(cursorId ? { afterId: cursorId } : {}) } : {}),
             },
           });
           incoming = incoming.concat(page.messages);
-          if (isIncremental && page.hasMoreOlder && page.nextBeforeCreatedAt) {
-            cursor = page.nextBeforeCreatedAt;
+          if (isIncremental && page.hasMoreOlder && page.nextAfterCreatedAt && page.nextAfterId) {
+            cursor = page.nextAfterCreatedAt;
+            cursorId = page.nextAfterId;
           } else {
             break;
           }
@@ -335,15 +342,17 @@ function ChatPage() {
         }
 
         let cursor: string | undefined = cached[cached.length - 1]?.created_at;
+        let cursorId: string | undefined = cached[cached.length - 1]?.id;
         const incoming: any[] = [];
 
-        while (cursor) {
+        while (cursor && cursorId) {
           const page = await listMsgs({
-            data: { conversationId, afterCreatedAt: cursor, limit: MESSAGE_PAGE_SIZE },
+            data: { conversationId, afterCreatedAt: cursor, afterId: cursorId, limit: MESSAGE_PAGE_SIZE },
           });
           incoming.push(...page.messages);
-          if (!page.hasMoreOlder || !page.nextBeforeCreatedAt || page.messages.length === 0) break;
-          cursor = page.nextBeforeCreatedAt;
+          if (!page.hasMoreOlder || !page.nextAfterCreatedAt || !page.nextAfterId || page.messages.length === 0) break;
+          cursor = page.nextAfterCreatedAt;
+          cursorId = page.nextAfterId;
         }
 
         if (!cancelled && incoming.length > 0) {
