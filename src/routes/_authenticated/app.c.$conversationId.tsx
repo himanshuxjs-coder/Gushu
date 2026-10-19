@@ -164,10 +164,6 @@ function ChatPage() {
   }, []);
 
   const otherIsViewing = useRemoteViewingPresence(conversationId, meId, conv.data?.other?.id);
-  const otherIsViewingRef = useRef(otherIsViewing);
-  useEffect(() => {
-    otherIsViewingRef.current = otherIsViewing;
-  }, [otherIsViewing]);
 
   const showNewMessagesSeparator = useCallback((messages: any[]) => {
     const incoming = messages
