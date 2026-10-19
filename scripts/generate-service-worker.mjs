@@ -18,7 +18,7 @@ const result = await generateSW({
       handler: "NetworkFirst",
       options: {
         cacheName: "gushu-app-pages",
-        networkTimeoutSeconds: 3,
+        networkTimeoutSeconds: 1,
         expiration: { maxEntries: 20 },
       },
     },
