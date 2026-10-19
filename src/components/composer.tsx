@@ -111,9 +111,12 @@ export function Composer({
   const refreshScheduledMessages = useCallback(async () => {
     try {
       const rows = await listScheduled({ data: { conversationId } });
-      setScheduledMessages(rows as ScheduledMessage[]);
+      const pending = rows as ScheduledMessage[];
+      setScheduledMessages(pending);
+      if (pending.length === 0) setScheduleListOpen(false);
     } catch {
       setScheduledMessages([]);
+      setScheduleListOpen(false);
     }
   }, [conversationId, listScheduled]);
 
@@ -762,7 +765,14 @@ export function Composer({
         <div className="mx-auto mb-2 w-full max-w-4xl px-2 md:px-0">
           <button
             type="button"
-            onClick={() => setScheduleListOpen((open) => !open)}
+            onClick={() => {
+              // Never open an empty scheduled-message list.
+              if (scheduledMessages.length === 0) {
+                setScheduleListOpen(false);
+                return;
+              }
+              setScheduleListOpen((open) => !open);
+            }}
             className="group flex w-full items-center justify-between rounded-xl border border-primary/20 bg-card/80 px-3 py-2 text-left shadow-sm backdrop-blur transition-all duration-300 hover:border-primary/45 hover:shadow-[0_0_24px_rgba(99,102,241,0.12)]"
             aria-expanded={scheduleListOpen}
           >
@@ -900,7 +910,15 @@ export function Composer({
         )}
       </div>
 
-      <div className={cn("pointer-events-none absolute inset-x-2 bottom-full z-50 mb-2 origin-bottom transition-all duration-300 sm:inset-x-6", scheduleOpen ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-95 opacity-0")}>
+      <div
+        aria-hidden={!scheduleOpen}
+        className={cn(
+          "absolute inset-x-2 bottom-full z-50 mb-2 origin-bottom transition-all duration-300 sm:inset-x-6",
+          scheduleOpen
+            ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
+            : "pointer-events-none translate-y-2 scale-95 opacity-0",
+        )}
+      >
         <div className="pointer-events-auto mx-auto w-full max-w-md rounded-2xl border border-border bg-background/95 p-3 text-foreground shadow-xl backdrop-blur-xl sm:p-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
