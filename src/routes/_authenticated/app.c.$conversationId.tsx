@@ -685,6 +685,12 @@ function ChatPage() {
           let msg = payload.new as any;
           if (!msg) return;
 
+          // A live INSERT is also a recovery signal: reconcile any messages
+          // missed before this event. Trigger before merging this row so the
+          // incremental cursor is based on the previous cache, not this newer
+          // event (which could otherwise skip messages that arrived just before it).
+          syncNewMessagesRef.current?.();
+
           // Enrich replied_message from cache if present
           if (msg.reply_to) {
             const cached = queryClient.getQueryData<any>(["messages", conversationId]) ?? [];
