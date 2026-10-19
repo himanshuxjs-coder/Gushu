@@ -108,6 +108,7 @@ function ChatPage() {
   const preserveScrollRef = useRef<{ height: number; top: number } | null>(null);
   const [visibleMessageLimit, setVisibleMessageLimit] = useState(MESSAGE_PAGE_SIZE);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [refreshingOnEntry, setRefreshingOnEntry] = useState(true);
 
   const conv = useQuery({
     queryKey: ["conversation", conversationId],
@@ -284,6 +285,27 @@ function ChatPage() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+
+  // Refresh the chat once every time this conversation screen is entered.
+  // Existing cached messages remain visible; temporary skeleton bubbles show during the request.
+  useEffect(() => {
+    let cancelled = false;
+    setRefreshingOnEntry(true);
+
+    void queryClient
+      .invalidateQueries({
+        queryKey: ["messages", conversationId],
+        exact: true,
+        refetchType: "active",
+      })
+      .finally(() => {
+        if (!cancelled) setRefreshingOnEntry(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, queryClient]);
 
   // Fetch only missed messages when the app returns or connectivity is restored.
   // No timer/polling: normal incoming messages are inserted by the Realtime callback.
@@ -1406,6 +1428,30 @@ function ChatPage() {
             {msgs.isLoading && (
               <div className="grid h-full place-items-center text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
+              </div>
+            )}
+            {refreshingOnEntry && (
+              <div className="space-y-4" aria-label="Refreshing messages" aria-live="polite">
+                {[0, 1, 2].map((item) => (
+                  <div
+                    key={item}
+                    className={cn(
+                      "flex w-full animate-pulse",
+                      item % 2 === 0 ? "justify-start" : "justify-end",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "rounded-2xl border border-border/70 bg-muted/70 p-3 shadow-sm",
+                        item === 1 ? "w-2/3 max-w-[300px]" : "w-3/4 max-w-[340px]",
+                      )}
+                    >
+                      <div className="mb-2 h-3 w-24 rounded bg-foreground/10" />
+                      <div className="mb-2 h-3 w-full rounded bg-foreground/10" />
+                      <div className="h-3 w-2/5 rounded bg-foreground/10" />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
             {msgs.isError && (
