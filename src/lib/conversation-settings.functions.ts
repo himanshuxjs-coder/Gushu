@@ -391,13 +391,16 @@ export const findHiddenChatByCode = createServerFn({ method: "POST" })
       .eq("is_hidden", true)
       .not("secret_code_hash", "is", null);
     if (error) throw new Error(error.message);
-    for (const chat of hiddenChats ?? []) {
-      if (chat.secret_code_hash) {
-        const match = await bcrypt.compare(data.code, chat.secret_code_hash);
-        if (match) {
-          return { found: true, conversationId: chat.conversation_id };
-        }
-      }
-    }
-    return { found: false, conversationId: null };
+    const matches = await Promise.all(
+      (hiddenChats ?? []).map(async (chat) => ({
+        conversationId: chat.conversation_id,
+        matched: chat.secret_code_hash
+          ? await bcrypt.compare(data.code, chat.secret_code_hash)
+          : false,
+      })),
+    );
+    const match = matches.find((item) => item.matched);
+    return match
+      ? { found: true, conversationId: match.conversationId }
+      : { found: false, conversationId: null };
   });
