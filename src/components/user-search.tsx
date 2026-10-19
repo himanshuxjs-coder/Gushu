@@ -39,6 +39,8 @@ export function UserSearch() {
   const navigate = useNavigate();
   const unlockHidden = useHiddenStore((s: any) => s.unlock);
   const ref = useRef<HTMLDivElement>(null);
+  const requestIdRef = useRef(0);
+  const searchCacheRef = useRef(new Map<string, { results: R[]; savedAt: number }>());
   const [profileOpen, setProfileOpen] = useState(false);
   const [fullProfile, setFullProfile] = useState<any>(null);
 
@@ -55,29 +57,54 @@ export function UserSearch() {
   }, []);
 
   useEffect(() => {
-    if (!q.trim()) {
+    const term = q.trim();
+    const requestId = ++requestIdRef.current;
+
+    if (!term) {
       setResults([]);
       setCodeMatch(null);
+      setLoading(false);
       return;
     }
-    const t = setTimeout(async () => {
-      setLoading(true);
+
+    // Keep recent username results in memory so revisiting a query feels instant.
+    // Secret-code matches are deliberately never cached.
+    const cached = searchCacheRef.current.get(term);
+    const cacheIsFresh = !!cached && Date.now() - cached.savedAt < 30_000;
+    if (cacheIsFresh) setResults(cached.results);
+
+    const timer = setTimeout(async () => {
+      if (!cacheIsFresh) setLoading(true);
       setCodeMatch(null);
-      try {
-        const term = q.trim();
-        const [r, hidden] = await Promise.all([
-          search({ data: { q: term } }),
-          term.length >= 4 ? findHidden({ data: { code: term } }) : Promise.resolve(null),
-        ]);
-        setResults(r);
-        if (hidden?.found && hidden.conversationId) setCodeMatch({ conversationId: hidden.conversationId });
-      } catch (e: any) {
-        // ignore
-      } finally {
-        setLoading(false);
+
+      const searchPromise = cacheIsFresh
+        ? Promise.resolve(cached!.results)
+        : search({ data: { q: term } });
+      const hiddenPromise = term.length >= 4
+        ? findHidden({ data: { code: term } }).catch(() => null)
+        : Promise.resolve(null);
+
+      const [searchResult, hidden] = await Promise.allSettled([searchPromise, hiddenPromise]);
+      if (requestId !== requestIdRef.current) return;
+
+      if (searchResult.status === "fulfilled") {
+        const found = searchResult.value;
+        setResults(found);
+        searchCacheRef.current.set(term, { results: found, savedAt: Date.now() });
+        if (searchCacheRef.current.size > 20) {
+          const oldestKey = searchCacheRef.current.keys().next().value;
+          if (oldestKey) searchCacheRef.current.delete(oldestKey);
+        }
       }
-    }, 220);
-    return () => clearTimeout(t);
+
+      if (hidden.status === "fulfilled" && hidden.value?.found && hidden.value.conversationId) {
+        setCodeMatch({ conversationId: hidden.value.conversationId });
+      }
+
+      setLoading(false);
+    }, 180);
+
+    return () => clearTimeout(timer);
   }, [q, search, findHidden]);
 
   useEffect(() => {
