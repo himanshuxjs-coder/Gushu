@@ -388,9 +388,11 @@ function ChatPage() {
         if (!cancelled) setRefreshingOnEntry(false);
         // If Realtime subscribed while a catch-up was running, run one more
         // incremental pass afterwards to close the fetch/subscribe race.
-        if (messageSyncRequestedRef.current && !cancelled) {
+        if (messageSyncRequestedRef.current) {
           messageSyncRequestedRef.current = false;
-          void syncNewMessages();
+          // The route may have changed while the previous request was running;
+          // dispatch through the ref so the current conversation gets synced.
+          syncNewMessagesRef.current?.();
         }
       }
     };
