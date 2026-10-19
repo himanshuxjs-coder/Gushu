@@ -217,20 +217,31 @@ function AppShell() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
         const message = payload.new as any;
         if (!message) return;
+        const activeConversationId = typeof window !== "undefined"
+          ? window.location.pathname.match(/\\/app\\/c\\/([^/?#]+)/)?.[1]
+          : null;
         queryClient.setQueryData(["conversations"], (old: any) => {
           if (!Array.isArray(old)) return old;
           return old.map((conv: any) => {
             if (conv.id !== message.conversation_id) return conv;
+            const incomingIsNewest = !conv.last?.created_at
+              || new Date(message.created_at).getTime() >= new Date(conv.last.created_at).getTime();
             return {
               ...conv,
-              last: {
-                content: message.content,
-                message_type: message.message_type,
-                created_at: message.created_at,
-                sender_id: message.sender_id,
-              },
-              last_message_at: message.created_at,
-              unread: message.sender_id === me?.id ? conv.unread : (conv.unread ?? 0) + 1,
+              ...(incomingIsNewest ? {
+                last: {
+                  content: message.content,
+                  message_type: message.message_type,
+                  created_at: message.created_at,
+                  sender_id: message.sender_id,
+                },
+                last_message_at: message.created_at,
+              } : {}),
+              // The active chat marks incoming messages as read; don't briefly bump
+              // its unread badge while its message list is already visible.
+              unread: message.sender_id === me?.id || activeConversationId === message.conversation_id
+                ? conv.unread
+                : (conv.unread ?? 0) + 1,
             };
           });
         });
