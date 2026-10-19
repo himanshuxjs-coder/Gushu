@@ -6,12 +6,13 @@ import { supabase } from "@/integrations/supabase/client";
  * own rejoin logic and create confusing subscription states.
  *
  * onReconnect runs only after a channel has left SUBSCRIBED and successfully
- * returns to SUBSCRIBED, allowing callers to reconcile any missed database
- * events with a fresh query.
+ * returns to SUBSCRIBED. onSubscribed runs after the initial successful subscription.
+ * Both allow callers to reconcile any missed database events incrementally.
  */
 export function subscribeWithReconnect(
   channel: ReturnType<typeof supabase.channel>,
   onReconnect?: () => void,
+  onSubscribed?: () => void,
 ): ReturnType<typeof supabase.channel> {
   let lastStatus: string | undefined;
 
@@ -23,6 +24,7 @@ export function subscribeWithReconnect(
         onReconnect?.();
       } else {
         console.info("[Gushu Realtime] channel subscribed");
+        if (lastStatus === undefined) onSubscribed?.();
       }
       lastStatus = status;
       return;
