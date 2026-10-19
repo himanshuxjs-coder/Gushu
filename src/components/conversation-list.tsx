@@ -279,9 +279,9 @@ export const ConversationList = memo(function ConversationList({
                   onFocus={() => prefetchChat(c.id)}
                   onTouchStart={() => prefetchChat(c.id)}
                   className={cn(
-                    "conversation-row interactive-row block p-4 transition-[transform,opacity,background-color,box-shadow] duration-150 ease-out hover:bg-muted/40 animate-in-fade",
+                    "conversation-row block min-h-[76px] p-4 transition-[background-color,box-shadow] duration-200 ease-out hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 animate-in-fade",
                     idx < 10 && `stagger-${Math.min(Math.floor(idx / 2) + 1, 5)}`,
-                    isActive && "conversation-row-active bg-muted/60 scale-[1.02] shadow-sm z-10",
+                    isActive && "conversation-row-active bg-muted/70 shadow-[inset_3px_0_0_var(--brand-violet)]",
                     c.hidden && "opacity-60",
                   )}
                 >
@@ -293,13 +293,22 @@ export const ConversationList = memo(function ConversationList({
                         </div>
                       ) : (
                         <>
-                          <button
+                          <span
+                            role="button"
+                            tabIndex={0}
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
                               if (o?.id) openProfile(o.id);
                             }}
-                            className="cursor-pointer transition-transform duration-300 hover:scale-110"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (o?.id) openProfile(o.id);
+                              }
+                            }}
+                            className="block cursor-pointer rounded-full transition-transform duration-200 hover:scale-[1.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                             aria-label="View profile"
                           >
                             <Avatar
@@ -307,7 +316,7 @@ export const ConversationList = memo(function ConversationList({
                               url={o?.avatar_url}
                               size={40}
                             />
-                          </button>
+                          </span>
                           {o && isOnline(o.last_seen_at) && (
                             <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-400 ring-2 ring-sidebar" />
                           )}
