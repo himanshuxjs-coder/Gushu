@@ -169,12 +169,8 @@ function AppShell() {
     gcTime: 300000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    refetchInterval: () => {
-      if (typeof document === "undefined") return false;
-      if (document.visibilityState === "hidden") return false;
-      return 4_000;
-    },
-    refetchIntervalInBackground: false,
+    // Conversation previews and unread counts are updated by app-feed Realtime.
+    // Reconnect/focus refetches reconcile missed events without continuous polling.
   });
 
   useEffect(() => {
