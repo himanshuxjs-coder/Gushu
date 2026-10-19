@@ -110,23 +110,27 @@ export const listMessages = createServerFn({ method: "POST" })
       .select("*, profiles!deleted_by_id(username, display_name)")
       .eq("conversation_id", data.conversationId)
       .is("deleted_at", null)
-      .or(`delete_after.is.null,delete_after.gt.${nowIso}`)
       .order("created_at", { ascending: !!data.afterCreatedAt })
       .order("id", { ascending: !!data.afterCreatedAt })
       .limit(pageSize + 1);
 
     if (data.beforeCreatedAt) {
-      messagesQuery = messagesQuery.lt("created_at", data.beforeCreatedAt);
+      messagesQuery = messagesQuery
+        .or(`delete_after.is.null,delete_after.gt.${nowIso}`)
+        .lt("created_at", data.beforeCreatedAt);
     } else if (data.afterCreatedAt) {
-      // Use a composite cursor so bursts of messages sharing the same created_at
-      // timestamp are not skipped between catch-up pages.
-      if (data.afterId) {
-        messagesQuery = messagesQuery.or(
-          `created_at.gt.${data.afterCreatedAt},and(created_at.eq.${data.afterCreatedAt},id.gt.${data.afterId})`,
-        );
-      } else {
-        messagesQuery = messagesQuery.gt("created_at", data.afterCreatedAt);
-      }
+      // PostgREST's .or() filters should be combined into one expression.
+      // Calling .or() twice can cause the incremental query to fail, which
+      // leaves the UI cache unchanged and makes re-entering a chat look broken.
+      // Keep expiry filtering and the composite cursor inside one AND expression.
+      const cursorFilter = data.afterId
+        ? `or(created_at.gt.${data.afterCreatedAt},and(created_at.eq.${data.afterCreatedAt},id.gt.${data.afterId}))`
+        : `created_at.gt.${data.afterCreatedAt}`;
+      messagesQuery = messagesQuery.or(
+        `and(or(delete_after.is.null,delete_after.gt.${nowIso}),${cursorFilter})`,
+      );
+    } else {
+      messagesQuery = messagesQuery.or(`delete_after.is.null,delete_after.gt.${nowIso}`);
     }
 
     const savedQuery = data.beforeCreatedAt || data.afterCreatedAt
