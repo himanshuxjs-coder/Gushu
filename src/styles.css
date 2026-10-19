@@ -587,3 +587,40 @@
     scroll-behavior: auto !important;
   }
 }
+
+
+/* Gushu interaction polish: consistent focus, touch behavior, and restrained surfaces. */
+@layer base {
+  :where(button, a, [role="button"], input, textarea, select) {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :where(button, a, [role="button"]):focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--ring), transparent 18%);
+    outline-offset: 2px;
+  }
+
+  :where(input, textarea, select) {
+    accent-color: var(--ring);
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--brand-violet), transparent 72%);
+    color: var(--foreground);
+  }
+}
+
+@media (hover: none) {
+  .interactive-row:hover {
+    transform: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-sidebar,
+  .chat-header-shell,
+  .composer-shell {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
