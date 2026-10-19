@@ -300,6 +300,7 @@ function ChatPage() {
         await writeCachedMessages(meId, conversationId, merged).catch(() => {});
         return merged;
       } catch (error) {
+        console.error("[Gushu] Initial message query failed", { conversationId, error });
         const cached = await readCachedMessages(meId, conversationId);
         if (cached) {
           queryClient.setQueryData(["messages-pagination", conversationId], {
@@ -388,8 +389,30 @@ function ChatPage() {
             showNewMessagesSeparator(incomingFromOther);
           }
         }
-      } catch {
-        // Keep existing messages on screen if the request fails.
+      } catch (error) {
+        // Do not silently hide a failed catch-up: that made stale local cache
+        // look like a successful sync even after the user manually refreshed.
+        console.error("[Gushu] Missed-message catch-up failed", { conversationId, error });
+        try {
+          // Recovery path: at least reconcile the latest server page if the
+          // incremental cursor request fails. Existing messages are preserved.
+          const fallbackPage = await listMsgs({
+            data: { conversationId, limit: MESSAGE_PAGE_SIZE },
+          });
+          if (!cancelled) {
+            const current = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
+            const fallbackIncoming = fallbackPage.messages.filter(
+              (message: any) => !current.some((cachedMessage: any) => cachedMessage.id === message.id),
+            );
+            queryClient.setQueryData<any[]>(["messages", conversationId], mergeMessages(current, fallbackPage.messages));
+            await writeCachedMessages(meId, conversationId, mergeMessages(current, fallbackPage.messages)).catch(() => {});
+            showNewMessagesSeparator(fallbackIncoming.filter(
+              (message: any) => message.sender_id !== meId && message.message_type !== "system",
+            ));
+          }
+        } catch (fallbackError) {
+          console.error("[Gushu] Latest-page message recovery also failed", { conversationId, error: fallbackError });
+        }
       } finally {
         messageSyncInFlightRef.current = false;
         if (!cancelled) setRefreshingOnEntry(false);
