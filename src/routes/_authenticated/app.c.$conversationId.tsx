@@ -323,7 +323,9 @@ function ChatPage() {
   // newer than the local cache. Watching the URL also covers routers that retain
   // the route component while navigating between the list and a conversation.
   useEffect(() => {
-    if (location.pathname !== `/app/c/${conversationId}`) return;
+    // This effect lives only on the conversation route. Do not gate it on a
+    // hand-built pathname string: router base paths or trailing slashes could
+    // otherwise silently skip the catch-up when returning from the chat list.
     let cancelled = false;
     setRefreshingOnEntry(true);
 
@@ -367,7 +369,9 @@ function ChatPage() {
             data: { conversationId, afterCreatedAt: cursor, afterId: cursorId, limit: MESSAGE_PAGE_SIZE },
           });
           incoming.push(...page.messages);
-          if (!page.hasMoreOlder || !page.nextAfterCreatedAt || !page.nextAfterId || page.messages.length === 0) break;
+          if (!page.hasMoreOlder || !page.nextAfterCreatedAt || !page.nextAfterId) break;
+          // Advance by the raw server cursor even if enrichment/filtering returns
+          // an empty visible page, otherwise a batch could prematurely stop.
           cursor = page.nextAfterCreatedAt;
           cursorId = page.nextAfterId;
         }
