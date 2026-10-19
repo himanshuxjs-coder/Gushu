@@ -275,7 +275,9 @@ function AppShell() {
         debounceInvalidation(queryClient, [["conversations"]], 500);
       });
 
-    subscribeWithReconnect(ch);
+    subscribeWithReconnect(ch, () => {
+      invalidateConversations();
+    });
     channelRef.current = ch;
 
     return () => {
