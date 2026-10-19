@@ -257,8 +257,14 @@ function ChatPage() {
     staleTime: 15000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    // Live message delivery is handled by Supabase Realtime. Reconcile on reconnect
-    // and when the tab regains focus instead of polling every 2.5 seconds.
+    // Supabase Realtime is the primary delivery path. Keep a conservative visible-tab
+    // fallback until live delivery is verified in production, so messages never require
+    // a manual refresh if a channel silently stops delivering events.
+    refetchInterval: () => {
+      if (typeof document === "undefined" || document.visibilityState === "hidden") return false;
+      return 2_500;
+    },
+    refetchIntervalInBackground: false,
   });
 
   const pagination = useQuery({
