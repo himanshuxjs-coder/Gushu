@@ -119,16 +119,13 @@ export const listMessages = createServerFn({ method: "POST" })
         .or(`delete_after.is.null,delete_after.gt.${nowIso}`)
         .lt("created_at", data.beforeCreatedAt);
     } else if (data.afterCreatedAt) {
-      // PostgREST's .or() filters should be combined into one expression.
-      // Calling .or() twice can cause the incremental query to fail, which
-      // leaves the UI cache unchanged and makes re-entering a chat look broken.
-      // Keep expiry filtering and the composite cursor inside one AND expression.
+      // Keep the incremental cursor as the only PostgREST OR expression.
+      // Expiry is filtered in memory below; nesting the expiry OR inside the
+      // cursor OR can produce a query the API rejects.
       const cursorFilter = data.afterId
         ? `or(created_at.gt.${data.afterCreatedAt},and(created_at.eq.${data.afterCreatedAt},id.gt.${data.afterId}))`
         : `created_at.gt.${data.afterCreatedAt}`;
-      messagesQuery = messagesQuery.or(
-        `and(or(delete_after.is.null,delete_after.gt.${nowIso}),${cursorFilter})`,
-      );
+      messagesQuery = messagesQuery.or(cursorFilter);
     } else {
       messagesQuery = messagesQuery.or(`delete_after.is.null,delete_after.gt.${nowIso}`);
     }
@@ -145,8 +142,13 @@ export const listMessages = createServerFn({ method: "POST" })
 
     const descRows = messageResult.data ?? [];
     const hasMoreOlder = descRows.length > pageSize;
-    const pageRows = descRows.slice(0, pageSize);
-    const nextBeforeCreatedAt = pageRows.at(-1)?.created_at ?? null;
+    const rawPageRows = descRows.slice(0, pageSize);
+    // Incremental queries intentionally fetch by cursor only; discard expired
+    // rows after pagination so the cursor can still advance past them.
+    const pageRows = data.afterCreatedAt
+      ? rawPageRows.filter((row: any) => !row.delete_after || new Date(row.delete_after).getTime() > Date.now())
+      : rawPageRows;
+    const nextBeforeCreatedAt = rawPageRows.at(-1)?.created_at ?? null;
     const savedIds = (savedResult.data ?? []).map((saved: any) => saved.message_id as string);
 
     let savedRows: any[] = [];
@@ -175,8 +177,9 @@ export const listMessages = createServerFn({ method: "POST" })
       messages: enriched,
       hasMoreOlder,
       nextBeforeCreatedAt,
-      nextAfterCreatedAt: pageRows.at(-1)?.created_at ?? null,
-      nextAfterId: pageRows.at(-1)?.id ?? null,
+      // Return the raw page cursor even when every row was expired and filtered out.
+      nextAfterCreatedAt: rawPageRows.at(-1)?.created_at ?? null,
+      nextAfterId: rawPageRows.at(-1)?.id ?? null,
     };
   });
 
