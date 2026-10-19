@@ -97,6 +97,7 @@ export const listMessages = createServerFn({ method: "POST" })
       conversationId: z.string().uuid(),
       beforeCreatedAt: z.string().datetime().optional(),
       afterCreatedAt: z.string().datetime().optional(),
+      afterId: z.string().uuid().optional(),
       limit: z.number().int().min(1).max(100).optional(),
     }).parse(input),
   )
@@ -111,13 +112,21 @@ export const listMessages = createServerFn({ method: "POST" })
       .is("deleted_at", null)
       .or(`delete_after.is.null,delete_after.gt.${nowIso}`)
       .order("created_at", { ascending: !!data.afterCreatedAt })
+      .order("id", { ascending: !!data.afterCreatedAt })
       .limit(pageSize + 1);
 
     if (data.beforeCreatedAt) {
       messagesQuery = messagesQuery.lt("created_at", data.beforeCreatedAt);
     } else if (data.afterCreatedAt) {
-      // Incremental catch-up: fetch only messages created after the last cached message.
-      messagesQuery = messagesQuery.gt("created_at", data.afterCreatedAt);
+      // Use a composite cursor so bursts of messages sharing the same created_at
+      // timestamp are not skipped between catch-up pages.
+      if (data.afterId) {
+        messagesQuery = messagesQuery.or(
+          `created_at.gt.${data.afterCreatedAt},and(created_at.eq.${data.afterCreatedAt},id.gt.${data.afterId})`,
+        );
+      } else {
+        messagesQuery = messagesQuery.gt("created_at", data.afterCreatedAt);
+      }
     }
 
     const savedQuery = data.beforeCreatedAt || data.afterCreatedAt
@@ -158,7 +167,13 @@ export const listMessages = createServerFn({ method: "POST" })
       conversationId: data.conversationId,
       rows: merged,
     });
-    return { messages: enriched, hasMoreOlder, nextBeforeCreatedAt };
+    return {
+      messages: enriched,
+      hasMoreOlder,
+      nextBeforeCreatedAt,
+      nextAfterCreatedAt: pageRows.at(-1)?.created_at ?? null,
+      nextAfterId: pageRows.at(-1)?.id ?? null,
+    };
   });
 
 export const sendMessage = createServerFn({ method: "POST" })
