@@ -910,16 +910,9 @@ export function Composer({
         )}
       </div>
 
-      <div
-        aria-hidden={!scheduleOpen}
-        className={cn(
-          "absolute inset-x-2 bottom-full z-50 mb-2 origin-bottom transition-all duration-300 sm:inset-x-6",
-          scheduleOpen
-            ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
-            : "pointer-events-none translate-y-2 scale-95 opacity-0",
-        )}
-      >
-        <div className="pointer-events-auto mx-auto w-full max-w-md rounded-2xl border border-border bg-background/95 p-3 text-foreground shadow-xl backdrop-blur-xl sm:p-4">
+      {scheduleOpen && (
+        <div className="absolute inset-x-2 bottom-full z-50 mb-2 origin-bottom animate-in fade-in zoom-in-95 duration-200 sm:inset-x-6">
+          <div className="mx-auto w-full max-w-md rounded-2xl border border-border bg-background/95 p-3 text-foreground shadow-xl backdrop-blur-xl sm:p-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
               <p className="flex items-center gap-2 text-sm font-semibold text-foreground"><CalendarClock className="size-4 text-primary" /> {editingSchedule ? "Edit schedule" : "Schedule message"}</p>
