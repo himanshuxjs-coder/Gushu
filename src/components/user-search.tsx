@@ -26,6 +26,7 @@ export function UserSearch() {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<R[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [open, setOpen] = useState(false);
   const [codeMatch, setCodeMatch] = useState<{ conversationId: string } | null>(null);
   const [secretCodePrompt, setSecretCodePrompt] = useState<{ user: R; conversationId: string } | null>(null);
@@ -61,6 +62,7 @@ export function UserSearch() {
     const requestId = ++requestIdRef.current;
 
     setCodeMatch(null);
+    setSearchError(false);
     if (!term) {
       setResults([]);
       setLoading(false);
@@ -92,12 +94,15 @@ export function UserSearch() {
 
       if (searchResult.status === "fulfilled") {
         const found = searchResult.value;
+        setSearchError(false);
         setResults(found);
         searchCacheRef.current.set(term, { results: found, savedAt: Date.now() });
         if (searchCacheRef.current.size > 20) {
           const oldestKey = searchCacheRef.current.keys().next().value;
           if (oldestKey) searchCacheRef.current.delete(oldestKey);
         }
+      } else {
+        setSearchError(true);
       }
 
       if (hidden.status === "fulfilled" && hidden.value?.found && hidden.value.conversationId) {
@@ -184,7 +189,7 @@ export function UserSearch() {
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Search here........😁!"
+          placeholder="Search people or enter a secret code"
           className="h-9 rounded-full bg-muted/40 pl-9 text-xs ring-1 ring-border focus-visible:ring-foreground/30"
         />
         {open && q.trim() && (
@@ -195,10 +200,16 @@ export function UserSearch() {
                 <span>Finding people</span>
               </div>
             )}
-            {!loading && results.length === 0 && !codeMatch && (
-              <div className="p-5 text-center text-xs text-muted-foreground">
+            {!loading && searchError && (
+              <div className="p-5 text-center text-xs text-muted-foreground" role="status">
                 <Search className="mx-auto mb-2 size-4 opacity-50" />
-                No users found
+                Search is temporarily unavailable. Check your connection and try again.
+              </div>
+            )}
+            {!loading && !searchError && results.length === 0 && !codeMatch && (
+              <div className="p-5 text-center text-xs text-muted-foreground" role="status">
+                <Search className="mx-auto mb-2 size-4 opacity-50" />
+                No matching people found
               </div>
             )}
             {codeMatch && (
@@ -230,15 +241,18 @@ export function UserSearch() {
                   idx < 5 && `stagger-${idx + 1}`,
                 )}
               >
-                <div 
-                  className="cursor-pointer transition-transform duration-300 hover:scale-110 active:scale-95"
+                <button
+                  type="button"
+                  className="shrink-0 rounded-full transition-transform duration-200 hover:scale-[1.04] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   onClick={() => openProfile(u)}
+                  aria-label={`View ${u.display_name ?? u.username}'s profile`}
                 >
                   <Avatar name={u.display_name ?? u.username} url={u.avatar_url} size={32} />
-                </div>
-                <div 
-                  className="min-w-0 flex-1 cursor-pointer"
-                  onClick={() => start(u)}
+                </button>
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  onClick={() => void start(u)}
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-medium">
@@ -247,7 +261,7 @@ export function UserSearch() {
                     {u.verified && <VerifiedBadge size={12} />}
                   </div>
                   <div className="truncate text-[11px] text-muted-foreground group-hover:text-primary transition-colors">@{u.username}</div>
-                </div>
+                </button>
               </div>
             ))}
           </div>
