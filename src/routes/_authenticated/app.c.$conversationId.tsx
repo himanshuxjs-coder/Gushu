@@ -324,16 +324,25 @@ function ChatPage() {
       try {
         const cached = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
         if (cached.length === 0) {
-          await queryClient.refetchQueries({
-            queryKey: ["messages", conversationId],
-            exact: true,
-            type: "active",
+          // A chat may be opened after navigating away while its query has no
+          // in-memory cache. Fetch the latest page directly instead of relying
+          // on React Query's stale-only refetch behavior.
+          const page = await listMsgs({
+            data: { conversationId, limit: MESSAGE_PAGE_SIZE },
           });
-          const loaded = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
-          const unreadIncoming = loaded.filter((message: any) =>
-            message.sender_id !== meId && !hasSeenReceipt(message)
-          );
-          if (!cancelled) showNewMessagesSeparator(unreadIncoming);
+          const loaded = mergeMessages([], page.messages);
+          if (!cancelled) {
+            queryClient.setQueryData(["messages", conversationId], loaded);
+            queryClient.setQueryData(["messages-pagination", conversationId], {
+              hasMoreOlder: page.hasMoreOlder,
+              beforeCreatedAt: page.nextBeforeCreatedAt,
+            });
+            await writeCachedMessages(meId, conversationId, loaded).catch(() => {});
+            const unreadIncoming = loaded.filter((message: any) =>
+              message.sender_id !== meId && !hasSeenReceipt(message)
+            );
+            showNewMessagesSeparator(unreadIncoming);
+          }
           return;
         }
 
