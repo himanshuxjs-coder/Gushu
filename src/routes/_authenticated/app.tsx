@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { App as CapacitorApp } from "@capacitor/app";
-import { useQuery, useQueryClient, useIsFetching } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { LogOut, Settings as SettingsIcon, Shield, CircleAlert as AlertCircle, RefreshCw, Loader as Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -238,7 +238,6 @@ function AppShell() {
     enabled: !!me,
   });
 
-  const isFetching = useIsFetching() > 0;
 
   // Single realtime channel for app-level updates
   useEffect(() => {
@@ -517,17 +516,6 @@ function AppShell() {
           hasActiveConversation ? "translate-x-0" : "translate-x-full md:translate-x-0",
         )}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center">
-          <div
-            className={cn(
-              "pointer-events-none mt-4 flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/95 px-4 py-2 text-xs text-white shadow-xl backdrop-blur-xl transition-all duration-300",
-              isFetching ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-3"
-            )}
-          >
-            <Loader2 className="size-4 animate-spin text-white" />
-            <span>Refreshing…</span>
-          </div>
-        </div>
         <Outlet />
       </main>
 
