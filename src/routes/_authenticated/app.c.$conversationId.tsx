@@ -1160,6 +1160,18 @@ function ChatPage() {
     }
   }, [animateScrollToBottom, firstUnreadMessage, meId, newMessagesSeparator, visibleMessages]);
 
+  // When catch-up discovers missed messages after the initial render, jump to
+  // the oldest one instead of leaving the recipient at the bottom of the chat.
+  useLayoutEffect(() => {
+    if (!newMessagesSeparator) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const target = el.querySelector(`[data-msg-id="${newMessagesSeparator.firstMessageId}"]`) as HTMLElement | null;
+    if (target) {
+      el.scrollTo({ top: Math.max(0, target.offsetTop - 24), behavior: "auto" });
+    }
+  }, [newMessagesSeparator, visibleMessages]);
+
   // Self-Destruct Messages: Client-side timer cleanup
   // Schedule removal for messages with expires_at (mirrored from delete_after).
   // The timer uses the persisted timestamp so it stays correct after refresh.
