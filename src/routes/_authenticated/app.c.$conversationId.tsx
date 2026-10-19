@@ -111,6 +111,10 @@ function ChatPage() {
   const [refreshingOnEntry, setRefreshingOnEntry] = useState(true);
   const [newMessagesSeparator, setNewMessagesSeparator] = useState<{ firstMessageId: string; count: number } | null>(null);
   const newMessagesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Share one incremental catch-up between chat entry and Realtime subscription recovery.
+  const syncNewMessagesRef = useRef<(() => void) | null>(null);
+  const messageSyncInFlightRef = useRef(false);
+  const messageSyncRequestedRef = useRef(false);
 
   const conv = useQuery({
     queryKey: ["conversation", conversationId],
@@ -314,13 +318,18 @@ function ChatPage() {
     refetchOnReconnect: false,
   });
 
-  // On chat entry, fetch only messages newer than the newest cached message.
-  // Update the message cache in place; never reload the whole page.
+  // On every chat entry, reconcile messages newer than the local cache.
+  // This same targeted sync is also called after Realtime first subscribes/reconnects.
   useEffect(() => {
     let cancelled = false;
     setRefreshingOnEntry(true);
 
     const syncNewMessages = async () => {
+      if (messageSyncInFlightRef.current) {
+        messageSyncRequestedRef.current = true;
+        return;
+      }
+      messageSyncInFlightRef.current = true;
       try {
         const cached = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
         if (cached.length === 0) {
@@ -375,13 +384,23 @@ function ChatPage() {
       } catch {
         // Keep existing messages on screen if the request fails.
       } finally {
+        messageSyncInFlightRef.current = false;
         if (!cancelled) setRefreshingOnEntry(false);
+        // If Realtime subscribed while a catch-up was running, run one more
+        // incremental pass afterwards to close the fetch/subscribe race.
+        if (messageSyncRequestedRef.current && !cancelled) {
+          messageSyncRequestedRef.current = false;
+          void syncNewMessages();
+        }
       }
     };
 
-    void syncNewMessages();
+    const runSync = () => { void syncNewMessages(); };
+    syncNewMessagesRef.current = runSync;
+    runSync();
     return () => {
       cancelled = true;
+      if (syncNewMessagesRef.current === runSync) syncNewMessagesRef.current = null;
     };
   }, [conversationId, hasSeenReceipt, listMsgs, meId, queryClient, showNewMessagesSeparator]);
 
@@ -817,17 +836,22 @@ function ChatPage() {
         },
       );
 
-    subscribeWithReconnect(ch, () => {
-      // Reconcile messages missed while the channel was disconnected.
-      void queryClient.invalidateQueries({
-        queryKey: ["messages", conversationId],
-        exact: true,
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ["conversations"],
-        exact: true,
-      });
-    });
+    subscribeWithReconnect(
+      ch,
+      () => {
+        // Reconcile only messages newer than the local cursor after a reconnect.
+        syncNewMessagesRef.current?.();
+        void queryClient.invalidateQueries({
+          queryKey: ["conversations"],
+          exact: true,
+        });
+      },
+      () => {
+        // Run a second incremental pass after the initial subscription is ready.
+        // This closes the gap if a message arrived while the entry fetch was in flight.
+        syncNewMessagesRef.current?.();
+      },
+    );
     realtimeRef.current = ch;
 
     // Separate channel for profile updates (other user's online/last-seen)
