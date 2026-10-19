@@ -267,6 +267,36 @@ function ChatPage() {
     refetchIntervalInBackground: false,
   });
 
+  // Mobile browsers and installed PWAs can suspend a WebSocket without reliably
+  // reporting a channel status transition. Always reconcile from the database when
+  // the user returns to this chat, even if React Query still considers data fresh.
+  useEffect(() => {
+    let syncTimer: ReturnType<typeof setTimeout> | null = null;
+    const syncMessagesOnReturn = () => {
+      if (document.visibilityState !== "visible") return;
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        void queryClient.invalidateQueries({
+          queryKey: ["messages", conversationId],
+          exact: true,
+          refetchType: "active",
+        });
+      }, 150);
+    };
+
+    document.addEventListener("visibilitychange", syncMessagesOnReturn);
+    window.addEventListener("pageshow", syncMessagesOnReturn);
+    window.addEventListener("focus", syncMessagesOnReturn);
+    window.addEventListener("online", syncMessagesOnReturn);
+    return () => {
+      if (syncTimer) clearTimeout(syncTimer);
+      document.removeEventListener("visibilitychange", syncMessagesOnReturn);
+      window.removeEventListener("pageshow", syncMessagesOnReturn);
+      window.removeEventListener("focus", syncMessagesOnReturn);
+      window.removeEventListener("online", syncMessagesOnReturn);
+    };
+  }, [conversationId, queryClient]);
+
   const pagination = useQuery({
     queryKey: ["messages-pagination", conversationId],
     queryFn: async () => ({ hasMoreOlder: false, beforeCreatedAt: null as string | null }),
