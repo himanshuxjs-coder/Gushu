@@ -60,9 +60,9 @@ export function UserSearch() {
     const term = q.trim();
     const requestId = ++requestIdRef.current;
 
+    setCodeMatch(null);
     if (!term) {
       setResults([]);
-      setCodeMatch(null);
       setLoading(false);
       return;
     }
@@ -71,7 +71,10 @@ export function UserSearch() {
     // Secret-code matches are deliberately never cached.
     const cached = searchCacheRef.current.get(term);
     const cacheIsFresh = !!cached && Date.now() - cached.savedAt < 30_000;
-    if (cacheIsFresh) setResults(cached.results);
+    if (cacheIsFresh) {
+      setResults(cached.results);
+      setLoading(false);
+    }
 
     const timer = setTimeout(async () => {
       if (!cacheIsFresh) setLoading(true);
