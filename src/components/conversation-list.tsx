@@ -226,7 +226,7 @@ export const ConversationList = memo(function ConversationList({
     }
   };
 
-  if (loading) {
+  if (loading && items.length === 0) {
     return (
       <div className="divide-y divide-border">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -332,13 +332,13 @@ export const ConversationList = memo(function ConversationList({
                       <div className="mb-0.5 flex items-center justify-between">
                         <div className="flex items-center gap-1.5 truncate">
                           <span className="truncate text-sm font-medium text-foreground">
-                            {c.hidden && c.hasSecretCode ? "Unknown User" : (o?.display_name ?? o?.username)}
+                            {c.hidden && c.hasSecretCode ? "Unknown User" : (o?.display_name ?? o?.username ?? "Unknown user")}
                           </span>
                           {! (c.hidden && c.hasSecretCode) && o?.verified && <VerifiedBadge size={12} />}
                           {c.hidden && <EyeOff className="size-3 text-muted-foreground" />}
                         </div>
                         <span className="ml-2 shrink-0 text-[10px] text-muted-foreground pr-8">
-                          {formatRelative(c.last_message_at)}
+                          {c.last_message_at ? formatRelative(c.last_message_at) : ""}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-2 pr-8">
