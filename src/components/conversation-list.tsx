@@ -262,7 +262,11 @@ export const ConversationList = memo(function ConversationList({
               ? "📷 Photo"
               : c.last.message_type === "video"
                 ? "🎬 Video"
-                : "📎 File"
+                : c.last.message_type === "audio"
+                  ? "🎤 Voice message"
+                  : c.last.message_type === "system"
+                    ? (c.last.content ?? "Chat update")
+                    : "📎 File"
           : "Say hello";
         const unreadCount = isCleared ? 0 : c.unread;
         return (
