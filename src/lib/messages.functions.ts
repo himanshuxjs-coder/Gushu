@@ -96,6 +96,7 @@ export const listMessages = createServerFn({ method: "POST" })
     z.object({
       conversationId: z.string().uuid(),
       beforeCreatedAt: z.string().datetime().optional(),
+      afterCreatedAt: z.string().datetime().optional(),
       limit: z.number().int().min(1).max(100).optional(),
     }).parse(input),
   )
@@ -114,9 +115,12 @@ export const listMessages = createServerFn({ method: "POST" })
 
     if (data.beforeCreatedAt) {
       messagesQuery = messagesQuery.lt("created_at", data.beforeCreatedAt);
+    } else if (data.afterCreatedAt) {
+      // Incremental catch-up: fetch only messages created after the last cached message.
+      messagesQuery = messagesQuery.gt("created_at", data.afterCreatedAt).order("created_at", { ascending: true });
     }
 
-    const savedQuery = data.beforeCreatedAt
+    const savedQuery = data.beforeCreatedAt || data.afterCreatedAt
       ? Promise.resolve({ data: [] })
       : supabase
           .from("message_saves")
