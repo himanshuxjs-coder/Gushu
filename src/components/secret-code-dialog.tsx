@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,13 @@ export function SecretCodeDialog({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (open) {
+      setCode("");
+      setError(null);
+    }
+  }, [open]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim() || loading) return;
@@ -51,7 +58,7 @@ export function SecretCodeDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={() => onCancel?.()}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen && !loading) onCancel?.(); }}>
       <DialogContent className="w-80 rounded-3xl border-border bg-card/95 backdrop-blur-xl shadow-2xl" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader className="space-y-4">
           <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
