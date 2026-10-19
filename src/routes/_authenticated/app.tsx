@@ -167,19 +167,12 @@ function AppShell() {
     retry: 2,
     staleTime: 30000,
     gcTime: 300000,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    // Realtime updates the list immediately; keep a slower visible-tab reconciliation
-    // as a safety net until production delivery is confirmed reliable.
-    refetchInterval: () => {
-      if (typeof document === "undefined" || document.visibilityState === "hidden") return false;
-      return 8_000;
-    },
-    refetchIntervalInBackground: false,
+    // The inbox is updated by Realtime and reconciled only on resume/reconnect.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
-  // Reconcile the inbox when a suspended tab/app becomes active again.
-  // Realtime is not a durable message queue, so missed events must be fetched from Postgres.
+  // One inbox sync when the app resumes or connectivity returns; never poll.
   useEffect(() => {
     let syncTimer: ReturnType<typeof setTimeout> | null = null;
     const syncInboxOnReturn = () => {
@@ -193,16 +186,17 @@ function AppShell() {
         });
       }, 150);
     };
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) syncInboxOnReturn();
+    };
 
     document.addEventListener("visibilitychange", syncInboxOnReturn);
-    window.addEventListener("pageshow", syncInboxOnReturn);
-    window.addEventListener("focus", syncInboxOnReturn);
+    window.addEventListener("pageshow", handlePageShow);
     window.addEventListener("online", syncInboxOnReturn);
     return () => {
       if (syncTimer) clearTimeout(syncTimer);
       document.removeEventListener("visibilitychange", syncInboxOnReturn);
-      window.removeEventListener("pageshow", syncInboxOnReturn);
-      window.removeEventListener("focus", syncInboxOnReturn);
+      window.removeEventListener("pageshow", handlePageShow);
       window.removeEventListener("online", syncInboxOnReturn);
     };
   }, [queryClient]);
