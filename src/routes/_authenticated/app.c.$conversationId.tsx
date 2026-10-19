@@ -109,6 +109,8 @@ function ChatPage() {
   const [visibleMessageLimit, setVisibleMessageLimit] = useState(MESSAGE_PAGE_SIZE);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [refreshingOnEntry, setRefreshingOnEntry] = useState(true);
+  const [newMessagesSeparator, setNewMessagesSeparator] = useState<{ firstMessageId: string; count: number } | null>(null);
+  const newMessagesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const conv = useQuery({
     queryKey: ["conversation", conversationId],
@@ -162,6 +164,29 @@ function ChatPage() {
   }, []);
 
   const otherIsViewing = useRemoteViewingPresence(conversationId, meId, conv.data?.other?.id);
+  const otherIsViewingRef = useRef(otherIsViewing);
+  useEffect(() => {
+    otherIsViewingRef.current = otherIsViewing;
+  }, [otherIsViewing]);
+
+  const showNewMessagesSeparator = useCallback((messages: any[]) => {
+    const incoming = messages
+      .filter((message: any) => message.sender_id !== meId && message.message_type !== "system")
+      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    if (!incoming.length || otherIsViewingRef.current) return;
+
+    if (newMessagesTimerRef.current) clearTimeout(newMessagesTimerRef.current);
+    setNewMessagesSeparator({ firstMessageId: incoming[0].id, count: incoming.length });
+    // Keep the marker for two minutes from when the recipient opens the missed messages.
+    newMessagesTimerRef.current = setTimeout(() => {
+      setNewMessagesSeparator(null);
+      newMessagesTimerRef.current = null;
+    }, 120_000);
+  }, [meId]);
+
+  useEffect(() => () => {
+    if (newMessagesTimerRef.current) clearTimeout(newMessagesTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!settings?.is_locked || !settings.pin_hash || typeof window === "undefined") return;
@@ -301,6 +326,11 @@ function ChatPage() {
             exact: true,
             type: "active",
           });
+          const loaded = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
+          const unreadIncoming = loaded.filter((message: any) =>
+            message.sender_id !== meId && !hasSeenReceipt(message)
+          );
+          if (!cancelled) showNewMessagesSeparator(unreadIncoming);
           return;
         }
 
@@ -317,9 +347,16 @@ function ChatPage() {
         }
 
         if (!cancelled && incoming.length > 0) {
+          const incomingFromOther = incoming.filter((message: any) =>
+            message.sender_id !== meId && message.message_type !== "system"
+          );
           queryClient.setQueryData<any[]>(["messages", conversationId], (current) =>
             mergeMessages(current ?? cached, incoming),
           );
+          if (incomingFromOther.length > 0) {
+            setVisibleMessageLimit((limit) => Math.max(limit, cached.length + incoming.length));
+            showNewMessagesSeparator(incomingFromOther);
+          }
         }
       } catch {
         // Keep existing messages on screen if the request fails.
@@ -332,7 +369,7 @@ function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [conversationId, listMsgs, queryClient]);
+  }, [conversationId, hasSeenReceipt, listMsgs, meId, queryClient, showNewMessagesSeparator]);
 
   // Fetch only missed messages when the app returns or connectivity is restored.
   // No timer/polling: normal incoming messages are inserted by the Realtime callback.
@@ -599,6 +636,15 @@ function ChatPage() {
                   sender_name: ref.replied_message?.sender_name ?? null,
                 },
               };
+            }
+          }
+
+          // If the recipient replies, remove the missed-message marker immediately.
+          if (msg.sender_id === meId) {
+            setNewMessagesSeparator(null);
+            if (newMessagesTimerRef.current) {
+              clearTimeout(newMessagesTimerRef.current);
+              newMessagesTimerRef.current = null;
             }
           }
 
@@ -1079,6 +1125,15 @@ function ChatPage() {
     if (!initialScrollDoneRef.current) {
       initialScrollDoneRef.current = true;
 
+      if (newMessagesSeparator) {
+        const targetId = newMessagesSeparator.firstMessageId;
+        const msgEl = el.querySelector(`[data-msg-id="${targetId}"]`) as HTMLElement | null;
+        if (msgEl) {
+          el.scrollTo({ top: Math.max(0, msgEl.offsetTop - 24), behavior: "auto" });
+          return;
+        }
+      }
+
       if (firstUnreadMessage) {
         const targetId = firstUnreadMessage.id;
         const msgEl = el.querySelector(`[data-msg-id="${targetId}"]`) as HTMLElement | null;
@@ -1103,7 +1158,7 @@ function ChatPage() {
       requestAnimationFrame(() => animateScrollToBottom());
       window.setTimeout(() => animateScrollToBottom(), 120);
     }
-  }, [animateScrollToBottom, meId, visibleMessages]);
+  }, [animateScrollToBottom, firstUnreadMessage, meId, newMessagesSeparator, visibleMessages]);
 
   // Self-Destruct Messages: Client-side timer cleanup
   // Schedule removal for messages with expires_at (mirrored from delete_after).
@@ -1495,8 +1550,9 @@ function ChatPage() {
             )}
             {(() => {
               const filtered = visibleMessages;
-              const firstUnreadIndex = filtered.findIndex((m: any) => m.sender_id !== meId && !hasSeenReceipt(m));
-              const shouldShowNewMessagesDivider = unreadMessageCount > 3 && firstUnreadIndex !== -1;
+              const separatorIndex = newMessagesSeparator
+                ? filtered.findIndex((message: any) => message.id === newMessagesSeparator.firstMessageId)
+                : -1;
 
               let prevDate: Date | null = null;
               return filtered.map((m: any, idx: number) => {
@@ -1517,12 +1573,13 @@ function ChatPage() {
                 return (
                   <div key={m.id} data-msg-id={m.id}>
                     {showDateSeparator && <DateSeparator date={currentDate} />}
-                    {/* Divider for a larger unread block so the user can catch up without losing context. */}
-                    {idx === firstUnreadIndex && shouldShowNewMessagesDivider && (
-                      <div className="flex justify-center my-3">
-                        <span className="px-4 py-1.5 bg-emerald-600 text-white text-[12px] rounded-full font-semibold shadow-sm">
-                          {unreadMessageCount} new messages
+                    {idx === separatorIndex && newMessagesSeparator && (
+                      <div className="my-4 flex items-center gap-3" role="status" aria-label={`${newMessagesSeparator.count} new messages`}>
+                        <span className="h-px flex-1 bg-red-500" />
+                        <span className="shrink-0 rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white shadow-sm">
+                          {newMessagesSeparator.count} new messages
                         </span>
+                        <span className="h-px flex-1 bg-red-500" />
                       </div>
                     )}
                     <div
