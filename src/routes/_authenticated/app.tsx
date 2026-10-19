@@ -169,8 +169,13 @@ function AppShell() {
     gcTime: 300000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    // Conversation previews and unread counts are updated by app-feed Realtime.
-    // Reconnect/focus refetches reconcile missed events without continuous polling.
+    // Realtime updates the list immediately; keep a slower visible-tab reconciliation
+    // as a safety net until production delivery is confirmed reliable.
+    refetchInterval: () => {
+      if (typeof document === "undefined" || document.visibilityState === "hidden") return false;
+      return 8_000;
+    },
+    refetchIntervalInBackground: false,
   });
 
   useEffect(() => {
