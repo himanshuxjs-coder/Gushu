@@ -24,7 +24,8 @@ async function enrichMessages({
     supabase
       .from("message_saves" as any)
       .select("message_id, user_id")
-      .eq("conversation_id", conversationId),
+      .eq("conversation_id", conversationId)
+      .in("message_id", allIds),
     supabase
       .from("message_deletions")
       .select("message_id")
@@ -43,8 +44,10 @@ async function enrichMessages({
   ]);
 
   const savedData = savedRes.data ?? [];
-  const allSavedIds = Array.from(new Set(savedData.map((s: any) => s.message_id as string)));
-  const mySavedIds = savedData.filter((s: any) => s.user_id === userId).map((s: any) => s.message_id as string);
+  const allSavedIds = new Set(savedData.map((s: any) => s.message_id as string));
+  const mySavedIds = new Set(
+    savedData.filter((s: any) => s.user_id === userId).map((s: any) => s.message_id as string),
+  );
 
   const deletedForMe = new Set((deletionRes.data ?? []).map((d: any) => d.message_id as string));
   const finalVisible = visible.filter((r: any) => !deletedForMe.has(r.id));
@@ -82,8 +85,8 @@ async function enrichMessages({
 
   return finalVisible.map((m: any) => ({
     ...m,
-    is_saved: allSavedIds.includes(m.id),
-    saved_by_me: mySavedIds.includes(m.id),
+    is_saved: allSavedIds.has(m.id),
+    saved_by_me: mySavedIds.has(m.id),
     reactions: reactionsByMsg.get(m.id) ?? [],
     replied_message: m.reply_to ? repliedMap.get(m.reply_to) ?? null : null,
     deleted_by_name: m.profiles?.display_name || m.profiles?.username || null,
