@@ -658,7 +658,17 @@ function ChatPage() {
         },
       );
 
-    subscribeWithReconnect(ch);
+    subscribeWithReconnect(ch, () => {
+      // Reconcile messages missed while the channel was disconnected.
+      void queryClient.invalidateQueries({
+        queryKey: ["messages", conversationId],
+        exact: true,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["conversations"],
+        exact: true,
+      });
+    });
     realtimeRef.current = ch;
 
     // Separate channel for profile updates (other user's online/last-seen)
