@@ -257,14 +257,8 @@ function ChatPage() {
     staleTime: 15000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    // Realtime is the primary live path, but keep a lightweight fallback while the tab is visible
-    // so missed events and read-receipt updates recover without a manual refresh.
-    refetchInterval: () => {
-      if (typeof document === "undefined") return false;
-      if (document.visibilityState === "hidden") return false;
-      return 2_500;
-    },
-    refetchIntervalInBackground: false,
+    // Live message delivery is handled by Supabase Realtime. Reconcile on reconnect
+    // and when the tab regains focus instead of polling every 2.5 seconds.
   });
 
   const pagination = useQuery({
@@ -519,7 +513,9 @@ function ChatPage() {
                   ...c,
                   last: { content: msg.content, message_type: msg.message_type, created_at: msg.created_at, sender_id: msg.sender_id },
                   last_message_at: msg.created_at,
-                  unread: msg.sender_id === meId ? c.unread : (c.unread ?? 0) + 1,
+                  // The app-level Realtime channel owns unread increments. Updating here too
+                  // would count the same incoming message twice while this chat is open.
+                  unread: c.unread,
                 }
                 : c,
             );
