@@ -179,9 +179,16 @@ function AppShell() {
       if (document.visibilityState !== "visible") return;
       if (syncTimer) clearTimeout(syncTimer);
       syncTimer = setTimeout(() => {
+        // Reconcile the active chat as well as the inbox when returning from
+        // offline/background. Realtime may not report a disconnect if the OS
+        // suspended the WebSocket while the app was asleep.
         void queryClient.invalidateQueries({
           queryKey: ["conversations"],
           exact: true,
+          refetchType: "active",
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["messages"],
           refetchType: "active",
         });
       }, 150);
@@ -312,6 +319,12 @@ function AppShell() {
 
     subscribeWithReconnect(ch, () => {
       invalidateConversations();
+      // The app-feed socket can recover before/without the chat socket.
+      // Sync the active chat so messages sent during the gap are recovered.
+      void queryClient.invalidateQueries({
+        queryKey: ["messages"],
+        refetchType: "active",
+      });
     });
     channelRef.current = ch;
 
