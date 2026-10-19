@@ -1287,6 +1287,16 @@ function ChatPage() {
         });
         isNearBottomRef.current = isAtBottom;
 
+        // Once the recipient reaches the latest message, the missed-message
+        // divider has served its purpose and should disappear immediately.
+        if (isAtBottom && newMessagesSeparator) {
+          setNewMessagesSeparator(null);
+          if (newMessagesTimerRef.current) {
+            clearTimeout(newMessagesTimerRef.current);
+            newMessagesTimerRef.current = null;
+          }
+        }
+
         // Detect intentional upward scroll
         if (scrollTop < lastScrollTopRef.current && !isAnimatingScrollRef.current) {
           userScrolledUpRef.current = true;
@@ -1333,7 +1343,7 @@ function ChatPage() {
       el.removeEventListener("touchstart", handleUserScrollInterruption);
       el.removeEventListener("pointerdown", handleUserScrollInterruption);
     };
-  }, [cancelScrollAnimation, isChatActuallyViewed, markSeenNow, unreadMessageCount, isMobile, msgs.data]);
+  }, [cancelScrollAnimation, isChatActuallyViewed, markSeenNow, unreadMessageCount, isMobile, msgs.data, newMessagesSeparator]);
 
   useEffect(() => {
     return () => {
