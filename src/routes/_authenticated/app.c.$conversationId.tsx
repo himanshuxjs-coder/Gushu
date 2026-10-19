@@ -249,8 +249,8 @@ function ChatPage() {
             },
           });
           incoming = incoming.concat(page.messages);
-          if (isIncremental && page.hasMoreOlder && page.messages.length > 0) {
-            cursor = page.messages[page.messages.length - 1].created_at;
+          if (isIncremental && page.hasMoreOlder && page.nextBeforeCreatedAt) {
+            cursor = page.nextBeforeCreatedAt;
           } else {
             break;
           }
