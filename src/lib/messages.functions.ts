@@ -110,14 +110,14 @@ export const listMessages = createServerFn({ method: "POST" })
       .eq("conversation_id", data.conversationId)
       .is("deleted_at", null)
       .or(`delete_after.is.null,delete_after.gt.${nowIso}`)
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: !data.afterCreatedAt })
       .limit(pageSize + 1);
 
     if (data.beforeCreatedAt) {
       messagesQuery = messagesQuery.lt("created_at", data.beforeCreatedAt);
     } else if (data.afterCreatedAt) {
       // Incremental catch-up: fetch only messages created after the last cached message.
-      messagesQuery = messagesQuery.gt("created_at", data.afterCreatedAt).order("created_at", { ascending: true });
+      messagesQuery = messagesQuery.gt("created_at", data.afterCreatedAt);
     }
 
     const savedQuery = data.beforeCreatedAt || data.afterCreatedAt
