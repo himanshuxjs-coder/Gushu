@@ -685,12 +685,9 @@ function ChatPage() {
           let msg = payload.new as any;
           if (!msg) return;
 
-          // A live INSERT is also a recovery signal: reconcile any messages
-          // missed before this event. Trigger before merging this row so the
-          // incremental cursor is based on the previous cache, not this newer
-          // event (which could otherwise skip messages that arrived just before it).
-          syncNewMessagesRef.current?.();
-
+          // Live inserts are merged directly. Catch-up runs on initial subscribe
+          // and reconnect; querying the server for every live message adds avoidable
+          // network work and can make the message list feel sluggish.
           // Enrich replied_message from cache if present
           if (msg.reply_to) {
             const cached = queryClient.getQueryData<any>(["messages", conversationId]) ?? [];
@@ -894,7 +891,6 @@ function ChatPage() {
 
     // Separate channel for profile updates (other user's online/last-seen)
     let profileChannel: ReturnType<typeof supabase.channel> | null = null;
-    let profileRefreshTimer: ReturnType<typeof setInterval> | null = null;
     if (otherId) {
       profileChannel = supabase
         .channel(`profile:${otherId}`)
@@ -919,24 +915,8 @@ function ChatPage() {
 
       subscribeWithReconnect(profileChannel);
 
-      // Profile updates are realtime-first, with a quiet fallback for missed
-      // WAL events so the heartbeat-driven avatar glow stays accurate.
-      const refreshOtherProfile = async () => {
-        const { data } = await supabase
-          .from("profiles")
-          .select("last_seen_at")
-          .eq("id", otherId)
-          .maybeSingle();
-        if (!data) return;
-        queryClient.setQueryData(["conversation", conversationId], (old: any) => {
-          if (!old) return old;
-          return { ...old, other: { ...old.other, last_seen_at: data.last_seen_at } };
-        });
-      };
-
-      profileRefreshTimer = setInterval(() => {
-        void refreshOtherProfile();
-      }, 30_000);
+      // Presence/profile changes are delivered through Realtime; avoid a
+      // repeating profile query while the conversation remains open.
     }
 
     return () => {
@@ -947,10 +927,6 @@ function ChatPage() {
       if (profileChannel) {
         supabase.removeChannel(profileChannel);
         profileChannel = null;
-      }
-      if (profileRefreshTimer) {
-        clearInterval(profileRefreshTimer);
-        profileRefreshTimer = null;
       }
     };
   }, [conversationId, queryClient, meId, conv.data?.other?.id]);
@@ -1463,34 +1439,8 @@ function ChatPage() {
   );
 
 
-  // Typing indicator is now handled via realtime broadcast events on the draft channel.
-  // Fallback: poll every 5s in case realtime events are missed.
-  useEffect(() => {
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    const poll = async () => {
-      if (document.visibilityState !== "visible") return;
-      try {
-        const { supabase: sb } = await import("@/integrations/supabase/client");
-        const { data } = await sb
-          .from("typing_status")
-          .select("user_id, typing_at")
-          .eq("conversation_id", conversationId)
-          .neq("user_id", meId);
-        const now = Date.now();
-        const active = (data ?? []).filter((r) => now - new Date(r.typing_at).getTime() < 4000);
-        // Only update if no recent realtime event (debounce to avoid flickering)
-        if (active.length === 0) {
-          setIsTyping(false);
-        }
-      } catch { }
-    };
-    // Realtime is primary; poll only as a low-frequency recovery path.
-    intervalId = setInterval(poll, 10000);
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [conversationId, meId]);
-
+  // Typing state is event-driven via the draft channel and expires locally.
+  // Do not poll typing_status: the broadcast stream is the live source of truth.
   const onEdited = useCallback(() => { }, []);
   const handleReply = useCallback((message: any) => {
     setReplyTarget(message);
