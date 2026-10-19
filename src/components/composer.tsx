@@ -944,6 +944,7 @@ export function Composer({
           </div>
         </div>
       </div>
+      )}
 
       {showVoice && (
         <div className="absolute inset-x-2 bottom-2 z-40 sm:inset-x-6 sm:bottom-6">
