@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -54,6 +54,7 @@ const MESSAGE_PAGE_SIZE = 100;
 
 function ChatPage() {
   const { conversationId } = Route.useParams();
+  const location = useLocation();
   const { user } = Route.useRouteContext();
   const meId = user.id;
   const currentUserVerified = useQuery({
@@ -318,9 +319,11 @@ function ChatPage() {
     refetchOnReconnect: false,
   });
 
-  // On every chat entry, reconcile messages newer than the local cache.
-  // This same targeted sync is also called after Realtime first subscribes/reconnects.
+  // On every chat entry—including returning from the chat list—reconcile messages
+  // newer than the local cache. Watching the URL also covers routers that retain
+  // the route component while navigating between the list and a conversation.
   useEffect(() => {
+    if (location.pathname !== `/app/c/${conversationId}`) return;
     let cancelled = false;
     setRefreshingOnEntry(true);
 
@@ -404,7 +407,7 @@ function ChatPage() {
       cancelled = true;
       if (syncNewMessagesRef.current === runSync) syncNewMessagesRef.current = null;
     };
-  }, [conversationId, hasSeenReceipt, listMsgs, meId, queryClient, showNewMessagesSeparator]);
+  }, [conversationId, hasSeenReceipt, listMsgs, location.pathname, meId, queryClient, showNewMessagesSeparator]);
 
   // Fetch only missed messages when the app returns or connectivity is restored.
   // No timer/polling: normal incoming messages are inserted by the Realtime callback.
