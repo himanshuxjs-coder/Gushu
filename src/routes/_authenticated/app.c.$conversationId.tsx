@@ -232,13 +232,37 @@ function ChatPage() {
             return cached;
           }
         }
-        const page = await listMsgs({ data: { conversationId, limit: MESSAGE_PAGE_SIZE } });
         const previous = queryClient.getQueryData<any>(["messages", conversationId]) ?? [];
-        const merged = mergeMessages(previous, page.messages);
-        queryClient.setQueryData(["messages-pagination", conversationId], {
-          hasMoreOlder: page.hasMoreOlder,
-          beforeCreatedAt: page.nextBeforeCreatedAt,
-        });
+        const isIncremental = previous.length > 0;
+        let cursor = isIncremental ? previous[previous.length - 1]?.created_at : undefined;
+        let incoming: any[] = [];
+        let page: any;
+
+        // Initial load gets the latest page. Subsequent catch-ups fetch only rows newer
+        // than the newest cached message, in small batches, until fully caught up.
+        do {
+          page = await listMsgs({
+            data: {
+              conversationId,
+              limit: MESSAGE_PAGE_SIZE,
+              ...(cursor ? { afterCreatedAt: cursor } : {}),
+            },
+          });
+          incoming = incoming.concat(page.messages);
+          if (isIncremental && page.hasMoreOlder && page.messages.length > 0) {
+            cursor = page.messages[page.messages.length - 1].created_at;
+          } else {
+            break;
+          }
+        } while (true);
+
+        const merged = mergeMessages(previous, incoming);
+        if (!isIncremental) {
+          queryClient.setQueryData(["messages-pagination", conversationId], {
+            hasMoreOlder: page.hasMoreOlder,
+            beforeCreatedAt: page.nextBeforeCreatedAt,
+          });
+        }
         await writeCachedMessages(meId, conversationId, merged).catch(() => {});
         return merged;
       } catch (error) {
@@ -255,21 +279,14 @@ function ChatPage() {
     },
     enabled: settingsQuery.isSuccess && !isLocked && !isHiddenLocked,
     staleTime: 15000,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    // Supabase Realtime is the primary delivery path. Keep a conservative visible-tab
-    // fallback until live delivery is verified in production, so messages never require
-    // a manual refresh if a channel silently stops delivering events.
-    refetchInterval: () => {
-      if (typeof document === "undefined" || document.visibilityState === "hidden") return false;
-      return 2_500;
-    },
-    refetchIntervalInBackground: false,
+    // Message inserts arrive through Realtime. Catch-up is event-driven (resume/reconnect),
+    // not periodic polling.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
-  // Mobile browsers and installed PWAs can suspend a WebSocket without reliably
-  // reporting a channel status transition. Always reconcile from the database when
-  // the user returns to this chat, even if React Query still considers data fresh.
+  // Fetch only missed messages when the app returns or connectivity is restored.
+  // No timer/polling: normal incoming messages are inserted by the Realtime callback.
   useEffect(() => {
     let syncTimer: ReturnType<typeof setTimeout> | null = null;
     const syncMessagesOnReturn = () => {
@@ -283,16 +300,17 @@ function ChatPage() {
         });
       }, 150);
     };
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) syncMessagesOnReturn();
+    };
 
     document.addEventListener("visibilitychange", syncMessagesOnReturn);
-    window.addEventListener("pageshow", syncMessagesOnReturn);
-    window.addEventListener("focus", syncMessagesOnReturn);
+    window.addEventListener("pageshow", handlePageShow);
     window.addEventListener("online", syncMessagesOnReturn);
     return () => {
       if (syncTimer) clearTimeout(syncTimer);
       document.removeEventListener("visibilitychange", syncMessagesOnReturn);
-      window.removeEventListener("pageshow", syncMessagesOnReturn);
-      window.removeEventListener("focus", syncMessagesOnReturn);
+      window.removeEventListener("pageshow", handlePageShow);
       window.removeEventListener("online", syncMessagesOnReturn);
     };
   }, [conversationId, queryClient]);
