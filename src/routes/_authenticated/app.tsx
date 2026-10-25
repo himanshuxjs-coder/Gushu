@@ -151,18 +151,20 @@ function AppShell() {
   const conversations = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
-      // Paint the last inbox immediately from IndexedDB while the server refresh
-      // runs in parallel with profile loading. The authenticated route already
-      // resolved the session, so this does not need to wait for the profile query.
-      const cached = await readCachedConversations(routeUser.id).catch(() => null);
+      // Start the network refresh and local-cache read together; never make the
+      // inbox wait for the profile request or for IndexedDB before contacting the server.
+      const cachedPromise = readCachedConversations(routeUser.id).catch(() => null);
+      if (!navigator.onLine) return (await cachedPromise) ?? [];
+
+      const serverPromise = listFn({ data: undefined as any });
+      const cached = await cachedPromise;
       if (cached) {
         queryClient.setQueryData(["conversations"], (current: any) =>
           Array.isArray(current) && current.length ? current : cached,
         );
-        if (!navigator.onLine) return cached;
       }
       try {
-        return await listFn({ data: undefined as any });
+        return await serverPromise;
       } catch (error) {
         if (cached) return cached;
         throw error;
