@@ -32,6 +32,7 @@ export const Route = createFileRoute("/_authenticated/app")({
 function AppShell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user: routeUser } = Route.useRouteContext();
   const listFn = useServerFn(listMyConversations);
   const isAdminFn = useServerFn(amIAdmin);
   const getIncognitoFn = useServerFn(getIncognito);
@@ -150,21 +151,26 @@ function AppShell() {
   const conversations = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
+      // Start the network refresh and local-cache read together; never make the
+      // inbox wait for the profile request or for IndexedDB before contacting the server.
+      const cachedPromise = readCachedConversations(routeUser.id).catch(() => null);
+      if (!navigator.onLine) return (await cachedPromise) ?? [];
+
+      const serverPromise = listFn({ data: undefined as any });
+      const cached = await cachedPromise;
+      if (cached) {
+        queryClient.setQueryData(["conversations"], (current: any) =>
+          Array.isArray(current) && current.length ? current : cached,
+        );
+      }
       try {
-        if (!navigator.onLine && meId) {
-          const cached = await readCachedConversations(meId);
-          if (cached) return cached;
-        }
-        return await listFn({ data: undefined as any });
+        return await serverPromise;
       } catch (error) {
-        if (meId) {
-          const cached = await readCachedConversations(meId);
-          if (cached) return cached;
-        }
+        if (cached) return cached;
         throw error;
       }
     },
-    enabled: meQuery.isSuccess && !!me,
+    enabled: !!routeUser?.id,
     retry: 2,
     staleTime: 60000,
     gcTime: 30 * 60_000,
@@ -210,9 +216,9 @@ function AppShell() {
   }, [queryClient]);
 
   useEffect(() => {
-    if (!meId) return;
+    if (!routeUser?.id) return;
     let cancelled = false;
-    void readCachedConversations(meId)
+    void readCachedConversations(routeUser.id)
       .then((cached) => {
         if (cancelled || !cached) return;
         queryClient.setQueryData(["conversations"], (current: any) =>
@@ -224,12 +230,12 @@ function AppShell() {
     return () => {
       cancelled = true;
     };
-  }, [meId, queryClient]);
+  }, [routeUser?.id, queryClient]);
 
   useEffect(() => {
-    if (!meId || !Array.isArray(conversations.data)) return;
-    void writeCachedConversations(meId, conversations.data).catch(() => {});
-  }, [conversations.data, meId]);
+    if (!routeUser?.id || !Array.isArray(conversations.data)) return;
+    void writeCachedConversations(routeUser.id, conversations.data).catch(() => {});
+  }, [conversations.data, routeUser?.id]);
 
   const conversationList = useMemo(() => conversations.data ?? [], [conversations.data]);
 

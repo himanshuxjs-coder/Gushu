@@ -93,7 +93,26 @@ export const ConversationList = memo(function ConversationList({
   const getConversationSettingsFn = useServerFn(getConversationSettings);
   const listMessagesFn = useServerFn(listMessages);
 
-  const prefetchChat = useCallback((conversationId: string) => {
+  const prefetchChat = useCallback((conversationId: string, item?: Item) => {
+    // The inbox already knows whether a conversation requires a PIN or secret
+    // code. Seed only this non-message privacy metadata so the correct prompt
+    // can render on the first frame while the authoritative settings load.
+    if (item && (item.locked || item.hidden || item.hasPin || item.hasSecretCode)) {
+      queryClient.setQueryData(
+        ["conv-settings", conversationId],
+        (current: any) => ({
+          ...(current ?? {}),
+          // Never let stale cached "unlocked" metadata override a lock shown by
+          // the inbox. The authoritative server response will reconcile this.
+          is_hidden: !!current?.is_hidden || !!item.hidden || !!item.hasSecretCode,
+          is_locked: !!current?.is_locked || !!item.locked,
+          pin_hash: current?.pin_hash ?? (item.hasPin ? "device-locked" : null),
+          secret_code_hash: current?.secret_code_hash ?? (item.hasSecretCode ? "device-locked" : null),
+        }),
+        { updatedAt: 0 },
+      );
+    }
+
     void queryClient.prefetchQuery({
       queryKey: ["conversation", conversationId],
       queryFn: () => getConversationFn({ data: { id: conversationId } }),
@@ -279,9 +298,9 @@ export const ConversationList = memo(function ConversationList({
                 <Link
                   to="/app/c/$conversationId"
                   params={{ conversationId: c.id }}
-                  onPointerEnter={() => prefetchChat(c.id)}
-                  onFocus={() => prefetchChat(c.id)}
-                  onTouchStart={() => prefetchChat(c.id)}
+                  onPointerEnter={() => prefetchChat(c.id, c)}
+                  onFocus={() => prefetchChat(c.id, c)}
+                  onTouchStart={() => prefetchChat(c.id, c)}
                   className={cn(
                     "conversation-row block min-h-[76px] p-4 transition-[background-color,box-shadow] duration-200 ease-out hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 animate-in-fade",
                     idx < 10 && `stagger-${Math.min(Math.floor(idx / 2) + 1, 5)}`,

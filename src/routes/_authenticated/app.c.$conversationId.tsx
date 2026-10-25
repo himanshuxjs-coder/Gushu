@@ -116,6 +116,11 @@ function ChatPage() {
   const syncNewMessagesRef = useRef<(() => void) | null>(null);
   const messageSyncInFlightRef = useRef(false);
   const messageSyncRequestedRef = useRef(false);
+  const protectedMessagesPrefetchRef = useRef<any[] | null>(null);
+
+  useEffect(() => {
+    protectedMessagesPrefetchRef.current = null;
+  }, [conversationId]);
 
   const conv = useQuery({
     queryKey: ["conversation", conversationId],
@@ -137,6 +142,15 @@ function ChatPage() {
   const settingsQuery = useQuery({
     queryKey: ["conv-settings", conversationId],
     queryFn: async () => {
+      // If this chat was previously opened, use cached *locked* state immediately
+      // so its PIN/secret-code prompt does not wait for a network round-trip.
+      // Cached unlocked state is never trusted to reveal a conversation.
+      const cached = await readCachedPrivacySettings(meId, conversationId).catch(() => null);
+      if (cached && (cached.is_locked || cached.is_hidden)) {
+        queryClient.setQueryData(["conv-settings", conversationId], (current: any) =>
+          current && (current.is_locked || current.is_hidden) ? current : cached,
+        );
+      }
       try {
         const settings = await getSettings({ data: { conversationId } });
         void writeCachedPrivacySettings(meId, conversationId, settings).catch(() => {});
@@ -313,6 +327,8 @@ function ChatPage() {
       }
     },
     enabled: settingsQuery.isSuccess && !isLocked && !isHiddenLocked,
+    retry: (failureCount) => navigator.onLine && failureCount < 5,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
     staleTime: 15000,
     // Message inserts arrive through Realtime. Catch-up is event-driven (resume/reconnect),
     // not periodic polling.
@@ -473,6 +489,22 @@ function ChatPage() {
   });
 
   useEffect(() => {
+    // Warm the local cache while the PIN/secret-code dialog is open, but keep the
+    // messages out of React Query and out of the rendered UI until verification.
+    if (!settingsQuery.isSuccess || (!isLocked && !isHiddenLocked)) return;
+    let cancelled = false;
+    void readCachedMessages(meId, conversationId)
+      .then((cachedMessages) => {
+        if (!cancelled) protectedMessagesPrefetchRef.current = cachedMessages;
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [conversationId, isHiddenLocked, isLocked, meId, settingsQuery.isSuccess]);
+
+  useEffect(() => {
+    // Do not hydrate protected message content into the active query cache until
+    // the current privacy gate has been resolved and any required unlock succeeds.
+    if (!settingsQuery.isSuccess || isLocked || isHiddenLocked) return;
     let cancelled = false;
     void readCachedMessages(meId, conversationId)
       .then((cachedMessages) => {
@@ -486,7 +518,7 @@ function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [conversationId, meId, queryClient]);
+  }, [conversationId, isHiddenLocked, isLocked, meId, queryClient, settingsQuery.isSuccess]);
 
   useEffect(() => {
     if (!Array.isArray(msgs.data)) return;
@@ -1459,16 +1491,24 @@ function ChatPage() {
     }
 
     if (!valid) return false;
+    if (protectedMessagesPrefetchRef.current) {
+      queryClient.setQueryData(["messages", conversationId], protectedMessagesPrefetchRef.current);
+    }
     setIsUnlocked(true);
     setShowPinPrompt(false);
+    void queryClient.invalidateQueries({ queryKey: ["messages", conversationId], exact: true });
   }
 
   async function handleSecretVerify(code: string): Promise<boolean | void> {
     const { valid } = await verifySecret({ data: { conversationId, code } });
     if (!valid) return false;
+    if (protectedMessagesPrefetchRef.current) {
+      queryClient.setQueryData(["messages", conversationId], protectedMessagesPrefetchRef.current);
+    }
     unlockGlobally(conversationId);
     setIsSecretUnlocked(true);
     setShowSecretPrompt(false);
+    void queryClient.invalidateQueries({ queryKey: ["messages", conversationId], exact: true });
   }
 
   const theme = settings?.theme ?? "obsidian";
@@ -1552,44 +1592,27 @@ function ChatPage() {
                 {loadingOlder ? "Loading earlier messages..." : "Load earlier messages"}
               </button>
             )}
-            {msgs.isLoading && !msgs.data?.length && (
-              <div className="grid h-full place-items-center text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-              </div>
-            )}
-            {refreshingOnEntry && !msgs.data?.length && !msgs.isLoading && (
-              <div className="space-y-4" aria-label="Refreshing messages" aria-live="polite">
-                {[0, 1, 2].map((item) => (
-                  <div
-                    key={item}
-                    className={cn(
-                      "flex w-full animate-pulse",
-                      item % 2 === 0 ? "justify-start" : "justify-end",
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "rounded-2xl border border-border/70 bg-muted/70 p-3 shadow-sm",
-                        item === 1 ? "w-2/3 max-w-[300px]" : "w-3/4 max-w-[340px]",
-                      )}
-                    >
-                      <div className="mb-2 h-3 w-24 rounded bg-foreground/10" />
-                      <div className="mb-2 h-3 w-full rounded bg-foreground/10" />
-                      <div className="h-3 w-2/5 rounded bg-foreground/10" />
-                    </div>
-                  </div>
-                ))}
+            {(msgs.isLoading || (refreshingOnEntry && !msgs.data?.length)) && !msgs.data?.length && (
+              <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-3 px-6 text-center" role="status" aria-live="polite">
+                <div className="grid size-12 place-items-center rounded-full border border-primary/20 bg-primary/10 text-primary">
+                  <Loader2 className="size-5 animate-spin" />
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium text-foreground">Oops, you have a weak connection</p>
+                  <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">We’re still loading your conversation. Keep this screen open; your messages will appear as soon as they’re ready.</p>
+                </div>
               </div>
             )}
             {msgs.isError && (
               <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 text-center text-sm text-red-400">
                 <AlertCircle className="size-5" />
-                <p>Failed to load messages</p>
+                <p className="font-medium text-foreground">Oops, you have a weak connection</p>
+                <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">We couldn’t finish loading this conversation yet.</p>
                 <button
-                  onClick={() => msgs.refetch()}
-                  className="text-xs underline underline-offset-2 hover:no-underline"
+                  onClick={() => void msgs.refetch()}
+                  className="mt-1 rounded-full border border-border px-4 py-2 text-xs text-foreground transition-colors hover:bg-muted"
                 >
-                  Try again
+                  Retry loading
                 </button>
               </div>
             )}
