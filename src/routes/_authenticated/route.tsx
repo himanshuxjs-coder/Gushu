@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { initializePushNotifications } from "@/lib/notification-service";
@@ -37,6 +37,7 @@ export const Route = createFileRoute("/_authenticated")({
 
 function AuthenticatedLayout() {
   const { user } = Route.useRouteContext();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const updatePresenceFn = useServerFn(updatePresence);
   const markPresenceInactiveFn = useServerFn(markPresenceInactive);
@@ -133,7 +134,20 @@ function AuthenticatedLayout() {
     };
   }, [markPresenceInactiveFn, updatePresenceFn, user?.id]);
 
+  useEffect(() => {
+    const resumeApp = () => {
+      if (document.visibilityState !== "visible") return;
+      void router.invalidate();
+      void queryClient.invalidateQueries({ type: "active" });
+    };
 
+    document.addEventListener("visibilitychange", resumeApp);
+    window.addEventListener("focus", resumeApp);
+    return () => {
+      document.removeEventListener("visibilitychange", resumeApp);
+      window.removeEventListener("focus", resumeApp);
+    };
+  }, [queryClient, router]);
 
   return <Outlet />;
 }

@@ -324,14 +324,9 @@ function ChatPage() {
   // newer than the local cache. Watching the URL also covers routers that retain
   // the route component while navigating between the list and a conversation.
   useEffect(() => {
-    // Wait until privacy settings are known before syncing. The messages query
-    // already performs the initial fetch; sharing its query key below prevents
-    // a second request racing it when a chat opens with an empty cache.
-    if (!settingsQuery.isSuccess || isLocked || isHiddenLocked) {
-      setRefreshingOnEntry(false);
-      return;
-    }
-
+    // This effect lives only on the conversation route. Do not gate it on a
+    // hand-built pathname string: router base paths or trailing slashes could
+    // otherwise silently skip the catch-up when returning from the chat list.
     let cancelled = false;
     setRefreshingOnEntry(true);
 
@@ -344,25 +339,20 @@ function ChatPage() {
       try {
         const cached = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
         if (cached.length === 0) {
-          // fetchQuery shares an in-flight request with the messages observer
-          // instead of issuing a duplicate initial-page request.
-          const loaded = await queryClient.fetchQuery<any[]>({
-            queryKey: ["messages", conversationId],
-            staleTime: 15000,
-            queryFn: async () => {
-              const page = await listMsgs({
-                data: { conversationId, limit: MESSAGE_PAGE_SIZE },
-              });
-              const initialMessages = mergeMessages([], page.messages);
-              queryClient.setQueryData(["messages-pagination", conversationId], {
-                hasMoreOlder: page.hasMoreOlder,
-                beforeCreatedAt: page.nextBeforeCreatedAt,
-              });
-              await writeCachedMessages(meId, conversationId, initialMessages).catch(() => {});
-              return initialMessages;
-            },
+          // A chat may be opened after navigating away while its query has no
+          // in-memory cache. Fetch the latest page directly instead of relying
+          // on React Query's stale-only refetch behavior.
+          const page = await listMsgs({
+            data: { conversationId, limit: MESSAGE_PAGE_SIZE },
           });
+          const loaded = mergeMessages([], page.messages);
           if (!cancelled) {
+            queryClient.setQueryData(["messages", conversationId], loaded);
+            queryClient.setQueryData(["messages-pagination", conversationId], {
+              hasMoreOlder: page.hasMoreOlder,
+              beforeCreatedAt: page.nextBeforeCreatedAt,
+            });
+            await writeCachedMessages(meId, conversationId, loaded).catch(() => {});
             const unreadIncoming = loaded.filter((message: any) =>
               message.sender_id !== meId && !hasSeenReceipt(message)
             );
@@ -444,7 +434,7 @@ function ChatPage() {
       cancelled = true;
       if (syncNewMessagesRef.current === runSync) syncNewMessagesRef.current = null;
     };
-  }, [conversationId, hasSeenReceipt, isHiddenLocked, isLocked, listMsgs, location.pathname, meId, queryClient, settingsQuery.isSuccess, showNewMessagesSeparator]);
+  }, [conversationId, hasSeenReceipt, listMsgs, location.pathname, meId, queryClient, showNewMessagesSeparator]);
 
   // Fetch only missed messages when the app returns or connectivity is restored.
   // No timer/polling: normal incoming messages are inserted by the Realtime callback.
