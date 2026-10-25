@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { useRef, useState, useEffect, useCallback, lazy, Suspense, memo } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
 import { Paperclip, Send, Smile, Loader as Loader2, X, Mic, Camera, CalendarClock, ChevronUp, Pencil, Trash2 } from "lucide-react";
@@ -89,8 +89,7 @@ export function Composer({
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentRef = useRef<number>(0);
   const draftChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const draftDebounceRef = useRef<NodeJS.Timeout | null>(null);
-  const draftAnimationFrameRef = useRef<number | null>(null);
+  const draftDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDraftTextRef = useRef<string>("");
   const onTypingChangeRef = useRef(onTypingChange);
   const onDraftChangeRef = useRef(onDraftChange);
@@ -344,47 +343,34 @@ export function Composer({
     [conversationId, setTypingStatus, clearTypingStatus, meId],
   );
 
-  // Broadcast draft text with debounce (~100ms)
+  // Draft previews are best-effort: debounce network broadcasts so typing
+  // stays local and responsive instead of sending a Realtime event per keystroke.
   const broadcastDraft = useCallback(
     (currentText: string) => {
       if (!draftPreviewEnabled || !draftChannelRef.current) return;
 
-      // Clear any pending debounce
       if (draftDebounceRef.current) {
         clearTimeout(draftDebounceRef.current);
         draftDebounceRef.current = null;
       }
-      if (draftAnimationFrameRef.current) {
-        cancelAnimationFrame(draftAnimationFrameRef.current);
-        draftAnimationFrameRef.current = null;
-      }
 
-      // Only broadcast if text actually changed
-      if (currentText === lastDraftTextRef.current) return;
-      lastDraftTextRef.current = currentText;
-
-      draftAnimationFrameRef.current = requestAnimationFrame(() => {
+      draftDebounceRef.current = setTimeout(() => {
+        draftDebounceRef.current = null;
         if (!draftChannelRef.current) return;
 
         const trimmed = currentText.trim();
-        if (trimmed) {
-          draftChannelRef.current
-            .send({
-              type: "broadcast",
-              event: "draft",
-              payload: { userId: meId, text: trimmed },
-            })
-            .catch(() => {});
-        } else {
-          draftChannelRef.current
-            .send({
-              type: "broadcast",
-              event: "draft-clear",
-              payload: { userId: meId },
-            })
-            .catch(() => {});
-        }
-      });
+        if (trimmed === lastDraftTextRef.current) return;
+
+        const channel = draftChannelRef.current;
+        const event = trimmed ? "draft" : "draft-clear";
+        const payload = trimmed
+          ? { userId: meId, text: trimmed }
+          : { userId: meId };
+
+        // Mark only when the broadcast is actually queued, not on each keystroke.
+        lastDraftTextRef.current = trimmed;
+        channel.send({ type: "broadcast", event, payload }).catch(() => {});
+      }, 140);
     },
     [draftPreviewEnabled, meId],
   );
@@ -709,9 +695,40 @@ export function Composer({
     }
   }
 
+  const resizeFrameRef = useRef<number | null>(null);
+  const resizeComposerTextarea = useCallback(() => {
+    // Coalesce input, React effects, and emoji/draft restoration into one layout
+    // measurement per animation frame. Repeated scrollHeight reads and writes
+    // in the same keystroke can force multiple synchronous layouts on low-end phones.
+    if (resizeFrameRef.current !== null) return;
+
+    resizeFrameRef.current = requestAnimationFrame(() => {
+      resizeFrameRef.current = null;
+      const element = textareaRef.current;
+      if (!element) return;
+
+      const maxHeight = 144;
+      element.style.height = "auto";
+      const contentHeight = element.scrollHeight;
+      element.style.height = `${Math.min(contentHeight, maxHeight)}px`;
+      element.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
+    };
+  }, []);
+
   const handleTextChange = useCallback(
     (value: string) => {
       const nextValue = value.length > MAX_MESSAGE_LENGTH ? value.slice(0, MAX_MESSAGE_LENGTH) : value;
+
+      // Keep the input handler lightweight; textarea sizing is coalesced per frame.
       setText(nextValue);
       handleTyping(nextValue);
       broadcastDraft(nextValue);
@@ -719,8 +736,13 @@ export function Composer({
         toast.error("Message cannot exceed 4000 characters.");
       }
     },
-    [handleTyping, broadcastDraft],
+    [handleTyping, broadcastDraft, resizeComposerTextarea],
   );
+
+  // Also size restored drafts and text inserted from the emoji picker.
+  useEffect(() => {
+    resizeComposerTextarea();
+  }, [text, resizeComposerTextarea]);
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key !== "Enter") return;
@@ -853,6 +875,7 @@ export function Composer({
           ref={textareaRef}
           value={text}
           onChange={(e) => handleTextChange(e.target.value)}
+          onInput={resizeComposerTextarea}
           onFocus={() => {
             setIsFocused(true);
             onFocus?.();
@@ -869,10 +892,10 @@ export function Composer({
           rows={1}
           placeholder="Type a message…"
           maxLength={MAX_MESSAGE_LENGTH}
-          className="min-h-[40px] flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-sm focus-visible:ring-0 sm:py-2"
+          className="min-h-[40px] max-h-36 flex-1 resize-none overflow-y-hidden border-0 bg-transparent px-2 py-2.5 text-sm leading-5 focus-visible:ring-0 sm:py-2"
         />
 
-        <EmojiPickerWrapper text={text} setText={setText} />
+        <EmojiPickerWrapper setText={setText} />
 
         {!text.trim() && !busy && (
           <div className="flex items-center gap-1 sm:gap-2">
@@ -981,7 +1004,7 @@ export function Composer({
   );
 }
 
-function EmojiPickerWrapper({ text, setText }: { text: string; setText: (t: string | ((prev: string) => string)) => void }) {
+const EmojiPickerWrapper = memo(function EmojiPickerWrapper({ setText }: { setText: (t: string | ((prev: string) => string)) => void }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
 
@@ -1039,4 +1062,4 @@ function EmojiPickerWrapper({ text, setText }: { text: string; setText: (t: stri
       </PopoverContent>
     </Popover>
   );
-}
+});
