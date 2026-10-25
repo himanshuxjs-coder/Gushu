@@ -695,25 +695,40 @@ export function Composer({
     }
   }
 
+  const resizeFrameRef = useRef<number | null>(null);
   const resizeComposerTextarea = useCallback(() => {
-    const element = textareaRef.current;
-    if (!element) return;
+    // Coalesce input, React effects, and emoji/draft restoration into one layout
+    // measurement per animation frame. Repeated scrollHeight reads and writes
+    // in the same keystroke can force multiple synchronous layouts on low-end phones.
+    if (resizeFrameRef.current !== null) return;
 
-    // Resize synchronously with the input event so deleting text also shrinks
-    // the composer immediately. Keep long messages inside a bounded viewport.
-    const maxHeight = 144;
-    element.style.height = "auto";
-    const contentHeight = element.scrollHeight;
-    element.style.height = `${Math.min(contentHeight, maxHeight)}px`;
-    element.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+    resizeFrameRef.current = requestAnimationFrame(() => {
+      resizeFrameRef.current = null;
+      const element = textareaRef.current;
+      if (!element) return;
+
+      const maxHeight = 144;
+      element.style.height = "auto";
+      const contentHeight = element.scrollHeight;
+      element.style.height = `${Math.min(contentHeight, maxHeight)}px`;
+      element.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
+    };
   }, []);
 
   const handleTextChange = useCallback(
     (value: string) => {
       const nextValue = value.length > MAX_MESSAGE_LENGTH ? value.slice(0, MAX_MESSAGE_LENGTH) : value;
 
-      // Resize directly from the input event before React schedules other work.
-      resizeComposerTextarea();
+      // Keep the input handler lightweight; textarea sizing is coalesced per frame.
       setText(nextValue);
       handleTyping(nextValue);
       broadcastDraft(nextValue);
