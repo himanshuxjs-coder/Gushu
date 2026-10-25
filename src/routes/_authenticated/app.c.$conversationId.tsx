@@ -116,6 +116,7 @@ function ChatPage() {
   const syncNewMessagesRef = useRef<(() => void) | null>(null);
   const messageSyncInFlightRef = useRef(false);
   const messageSyncRequestedRef = useRef(false);
+  const protectedMessagesPrefetchRef = useRef<any[] | null>(null);
 
   const conv = useQuery({
     queryKey: ["conversation", conversationId],
@@ -482,6 +483,19 @@ function ChatPage() {
     queryFn: async () => ({ hasMoreOlder: false, beforeCreatedAt: null as string | null }),
     enabled: false,
   });
+
+  useEffect(() => {
+    // Warm the local cache while the PIN/secret-code dialog is open, but keep the
+    // messages out of React Query and out of the rendered UI until verification.
+    if (!settingsQuery.isSuccess || (!isLocked && !isHiddenLocked)) return;
+    let cancelled = false;
+    void readCachedMessages(meId, conversationId)
+      .then((cachedMessages) => {
+        if (!cancelled) protectedMessagesPrefetchRef.current = cachedMessages;
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [conversationId, isHiddenLocked, isLocked, meId, settingsQuery.isSuccess]);
 
   useEffect(() => {
     // Do not hydrate protected message content into the active query cache until
@@ -1473,16 +1487,24 @@ function ChatPage() {
     }
 
     if (!valid) return false;
+    if (protectedMessagesPrefetchRef.current) {
+      queryClient.setQueryData(["messages", conversationId], protectedMessagesPrefetchRef.current);
+    }
     setIsUnlocked(true);
     setShowPinPrompt(false);
+    void queryClient.invalidateQueries({ queryKey: ["messages", conversationId], exact: true });
   }
 
   async function handleSecretVerify(code: string): Promise<boolean | void> {
     const { valid } = await verifySecret({ data: { conversationId, code } });
     if (!valid) return false;
+    if (protectedMessagesPrefetchRef.current) {
+      queryClient.setQueryData(["messages", conversationId], protectedMessagesPrefetchRef.current);
+    }
     unlockGlobally(conversationId);
     setIsSecretUnlocked(true);
     setShowSecretPrompt(false);
+    void queryClient.invalidateQueries({ queryKey: ["messages", conversationId], exact: true });
   }
 
   const theme = settings?.theme ?? "obsidian";
