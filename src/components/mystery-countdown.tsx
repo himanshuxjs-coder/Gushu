@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Sparkles } from "lucide-react";
 
 /**
@@ -109,7 +109,7 @@ function DigitCell({ value, label }: { value: string; label: string }) {
 
 function GiftBox({ color, index }: { color: string; index: number }) {
   return (
-    <span className={`birthday-gift birthday-gift-${index + 1}`} style={{ "--gift-color": color } as React.CSSProperties} aria-hidden="true">
+    <span className={`birthday-gift birthday-gift-${index + 1}`} style={{ "--gift-color": color } as CSSProperties} aria-hidden="true">
       <span className="birthday-gift-lid"><span className="birthday-gift-bow" /></span>
       <span className="birthday-gift-front"><span className="birthday-gift-ribbon" /></span>
       <span className="birthday-gift-side" />
