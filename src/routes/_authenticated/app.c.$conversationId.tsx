@@ -495,59 +495,59 @@ function ChatPage() {
       }
       messageSyncInFlightRef.current = true;
       try {
+        // Reconcile a rolling history window, not just messages newer than the
+        // newest cached row. A device may have a newer cached message while
+        // missing rows in the middle of the conversation.
         const cached = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
-        const confirmedCached = cached.filter(
-          (message: any) => !message.is_optimistic && !message.send_failed,
-        );
-        if (confirmedCached.length === 0) {
-          // If the cache only contains unsent/uncertain local messages, fetch
-          // the latest server page and merge it without dropping those locals.
+        const cachedIds = new Set(cached.map((message: any) => message.id));
+        const backfillStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        let cursor = backfillStart;
+        let cursorId: string | undefined;
+        const backfilled: any[] = [];
+
+        // Fetch in bounded pages so long conversations do not depend on one
+        // large request. listMessages returns raw keyset cursors even when
+        // expired rows are filtered out, so always advance using its cursor.
+        while (true) {
           const page = await listMsgs({
-            data: { conversationId, limit: MESSAGE_PAGE_SIZE },
+            data: {
+              conversationId,
+              afterCreatedAt: cursor,
+              ...(cursorId ? { afterId: cursorId } : {}),
+              limit: 100,
+            },
           });
-          const loaded = mergeMessages(cached, page.messages);
-          if (!cancelled) {
-            queryClient.setQueryData(["messages", conversationId], loaded);
-            queryClient.setQueryData(["messages-pagination", conversationId], {
-              hasMoreOlder: page.hasMoreOlder,
-              beforeCreatedAt: page.nextBeforeCreatedAt,
-            });
-            await writeCachedMessages(meId, conversationId, loaded).catch(() => {});
-            const unreadIncoming = loaded.filter((message: any) =>
-              message.sender_id !== meId && !hasSeenReceipt(message)
-            );
-            showNewMessagesSeparator(unreadIncoming);
+          backfilled.push(...page.messages);
+
+          if (!page.hasMoreOlder || !page.nextAfterCreatedAt || !page.nextAfterId) {
+            break;
           }
-          return;
-        }
-
-        let cursor: string | undefined = confirmedCached[confirmedCached.length - 1]?.created_at;
-        let cursorId: string | undefined = confirmedCached[confirmedCached.length - 1]?.id;
-        const incoming: any[] = [];
-
-        while (cursor && cursorId) {
-          const page = await listMsgs({
-            data: { conversationId, afterCreatedAt: cursor, afterId: cursorId, limit: MESSAGE_PAGE_SIZE },
-          });
-          incoming.push(...page.messages);
-          if (!page.hasMoreOlder || !page.nextAfterCreatedAt || !page.nextAfterId) break;
-          // Advance by the raw server cursor even if enrichment/filtering returns
-          // an empty visible page, otherwise a batch could prematurely stop.
           cursor = page.nextAfterCreatedAt;
           cursorId = page.nextAfterId;
         }
 
-        if (!cancelled && incoming.length > 0) {
-          const incomingFromOther = incoming.filter((message: any) =>
-            message.sender_id !== meId && message.message_type !== "system"
-          );
-          queryClient.setQueryData<any[]>(["messages", conversationId], (current) =>
-            mergeMessages(current ?? cached, incoming),
-          );
-          if (incomingFromOther.length > 0) {
-            setVisibleMessageLimit((limit) => Math.max(limit, cached.length + incoming.length));
-            showNewMessagesSeparator(incomingFromOther);
+        if (!cancelled) {
+          const newlyRecovered = backfilled.filter((message: any) => !cachedIds.has(message.id));
+          const current = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? cached;
+          const repaired = mergeMessages(current, backfilled);
+
+          queryClient.setQueryData(["messages", conversationId], repaired);
+          if (repaired.length > 0) {
+            // Make the recovered window visible rather than leaving it hidden
+            // behind the initial 50-message render limit.
+            setVisibleMessageLimit((limit) => Math.max(limit, repaired.length));
+            const oldest = repaired[0];
+            queryClient.setQueryData(["messages-pagination", conversationId], {
+              hasMoreOlder: true,
+              beforeCreatedAt: oldest.created_at,
+              beforeId: oldest.id,
+            });
           }
+
+          await writeCachedMessages(meId, conversationId, repaired).catch(() => {});
+          showNewMessagesSeparator(newlyRecovered.filter((message: any) =>
+            message.sender_id !== meId && message.message_type !== "system"
+          ));
         }
       } catch (error) {
         // Do not silently hide a failed catch-up: that made stale local cache
