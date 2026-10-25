@@ -26,6 +26,7 @@ export function UserSearch() {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<R[]>([]);
   const [loading, setLoading] = useState(false);
+  const [openingUserId, setOpeningUserId] = useState<string | null>(null);
   const [searchError, setSearchError] = useState(false);
   const [open, setOpen] = useState(false);
   const [codeMatch, setCodeMatch] = useState<{ conversationId: string } | null>(null);
@@ -129,6 +130,8 @@ export function UserSearch() {
   }, []);
 
   async function start(user: R) {
+    if (openingUserId) return;
+    setOpeningUserId(user.id);
     try {
       const { id } = await create({ data: { otherUserId: user.id } });
 
@@ -138,6 +141,7 @@ export function UserSearch() {
       if (access.requiresSecretCode) {
         // Block access - require secret code
         setSecretCodePrompt({ user, conversationId: id });
+        setOpeningUserId(null);
         setOpen(false);
         return;
       }
@@ -145,7 +149,9 @@ export function UserSearch() {
       setQ("");
       setOpen(false);
       navigate({ to: "/app/c/$conversationId", params: { conversationId: id } });
+      setOpeningUserId(null);
     } catch (e: any) {
+      setOpeningUserId(null);
       toast.error(e?.message ?? "Could not start chat");
     }
   }
@@ -241,14 +247,21 @@ export function UserSearch() {
             {results.map((u, idx) => (
               <div
                 key={u.id}
+                aria-busy={openingUserId === u.id}
                 className={cn(
-                  "interactive-row flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-muted/70 group animate-in-fade",
+                  "interactive-row flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-[background-color,box-shadow,transform] duration-200 group animate-in-fade",
+                  openingUserId === u.id
+                    ? "bg-primary/10 ring-1 ring-primary/30 shadow-sm scale-[0.99]"
+                    : openingUserId
+                      ? "opacity-60"
+                      : "hover:bg-muted/70",
                   idx < 5 && `stagger-${idx + 1}`,
                 )}
               >
                 <button
                   type="button"
-                  className="shrink-0 rounded-full transition-transform duration-200 hover:scale-[1.04] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                  disabled={!!openingUserId}
+                  className="shrink-0 rounded-full transition-transform duration-200 hover:scale-[1.04] active:scale-95 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   onClick={() => openProfile(u)}
                   aria-label={`View ${u.display_name ?? u.username}'s profile`}
                 >
@@ -256,7 +269,8 @@ export function UserSearch() {
                 </button>
                 <button
                   type="button"
-                  className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  disabled={!!openingUserId}
+                  className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition-colors disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   onClick={() => void start(u)}
                 >
                   <div className="flex items-center gap-1.5">
@@ -264,8 +278,11 @@ export function UserSearch() {
                       {u.display_name ?? u.username}
                     </span>
                     {u.verified && <VerifiedBadge size={12} />}
+                    {openingUserId === u.id && <Loader2 className="ml-1 size-3.5 shrink-0 animate-spin text-primary" aria-hidden="true" />}
                   </div>
-                  <div className="truncate text-[11px] text-muted-foreground group-hover:text-primary transition-colors">@{u.username}</div>
+                  <div className="truncate text-[11px] text-muted-foreground transition-colors group-hover:text-primary">
+                    {openingUserId === u.id ? "Opening chat…" : `@${u.username}`}
+                  </div>
                 </button>
               </div>
             ))}
