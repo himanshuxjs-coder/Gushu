@@ -622,7 +622,6 @@ function ChatPage() {
   );
 
   const unreadMessageCount = unreadMessages.length;
-  const firstUnreadMessage = unreadMessages[0] ?? null;
 
   const isChatActuallyViewed = useCallback(() => {
     const el = scrollRef.current;
@@ -1191,48 +1190,37 @@ function ChatPage() {
     }, 220);
   }, [animateScrollToBottom]);
 
-  // Smart auto-scroll: on first load jump to first unread, afterwards only
-  // auto-scroll if user is already near the bottom.
+  // Do not choose the initial scroll position until the entry catch-up has
+  // completed. That lets us reliably distinguish missed messages from an empty
+  // delta: jump to the oldest newly received message, otherwise to the chat end.
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el || !msgs.data) return;
+    if (!el || !msgs.data || refreshingOnEntry) return;
 
-    // Build visible, non-expired list
     const visible = visibleMessages.filter((message: any) => !message.deleted_at);
-
     const messageCountChanged = visible.length !== previousMessageCountRef.current;
     previousMessageCountRef.current = visible.length;
     const latestMessage = visible[visible.length - 1];
-    const firstUnreadIndex = visible.findIndex((m: any) => m.sender_id !== meId && !hasSeenReceipt(m));
 
     if (!initialScrollDoneRef.current) {
       initialScrollDoneRef.current = true;
 
       if (newMessagesSeparator) {
-        const targetId = newMessagesSeparator.firstMessageId;
-        const msgEl = el.querySelector(`[data-msg-id="${targetId}"]`) as HTMLElement | null;
-        if (msgEl) {
-          el.scrollTo({ top: Math.max(0, msgEl.offsetTop - 24), behavior: "auto" });
+        const target = el.querySelector(
+          `[data-msg-id="${newMessagesSeparator.firstMessageId}"]`,
+        ) as HTMLElement | null;
+        if (target) {
+          el.scrollTo({ top: Math.max(0, target.offsetTop - 24), behavior: "smooth" });
           return;
         }
       }
 
-      if (firstUnreadMessage) {
-        const targetId = firstUnreadMessage.id;
-        const msgEl = el.querySelector(`[data-msg-id="${targetId}"]`) as HTMLElement | null;
-        if (msgEl) {
-          el.scrollTo({ top: msgEl.offsetTop - 24, behavior: "auto" });
-          return;
-        }
-      }
-
-      // If there are no unread messages, enter on the latest message.
-      el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+      // No new messages were found during catch-up: always land at the end,
+      // even if some older messages still have stale unread receipts.
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       return;
     }
 
-    // After initial load, follow the latest message when the user is near the bottom
-    // or when a new message is sent/received and the conversation is already following the feed.
     const { scrollTop, scrollHeight, clientHeight } = el;
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 140;
     const shouldFollowNewMessage = messageCountChanged && (isNearBottom || latestMessage?.sender_id === meId);
@@ -1240,19 +1228,22 @@ function ChatPage() {
     if ((isNearBottom || shouldFollowNewMessage) && !userScrolledUpRef.current) {
       requestAnimationFrame(() => animateScrollToBottom());
     }
-  }, [animateScrollToBottom, firstUnreadMessage, meId, newMessagesSeparator, visibleMessages]);
+  }, [animateScrollToBottom, meId, newMessagesSeparator, refreshingOnEntry, visibleMessages, msgs.data]);
 
-  // When catch-up discovers missed messages after the initial render, jump to
-  // the oldest one instead of leaving the recipient at the bottom of the chat.
+  // If a separator is added or updated after the initial scroll, keep the oldest
+  // missed message visible. During entry catch-up, wait so we don't jump to the
+  // bottom before the server response tells us whether there are new messages.
   useLayoutEffect(() => {
-    if (!newMessagesSeparator) return;
+    if (refreshingOnEntry || !newMessagesSeparator) return;
     const el = scrollRef.current;
     if (!el) return;
-    const target = el.querySelector(`[data-msg-id="${newMessagesSeparator.firstMessageId}"]`) as HTMLElement | null;
+    const target = el.querySelector(
+      `[data-msg-id="${newMessagesSeparator.firstMessageId}"]`,
+    ) as HTMLElement | null;
     if (target) {
-      el.scrollTo({ top: Math.max(0, target.offsetTop - 24), behavior: "auto" });
+      el.scrollTo({ top: Math.max(0, target.offsetTop - 24), behavior: "smooth" });
     }
-  }, [newMessagesSeparator, visibleMessages]);
+  }, [newMessagesSeparator, refreshingOnEntry, visibleMessages]);
 
   // Self-Destruct Messages: Client-side timer cleanup
   // Schedule removal for messages with expires_at (mirrored from delete_after).
