@@ -109,6 +109,7 @@ function ChatPage() {
   const [showJumpToLatestButton, setShowJumpToLatestButton] = useState(false);
   const [unreadBelowScroll, setUnreadBelowScroll] = useState(0);
   const initialScrollDoneRef = useRef(false);
+  const entryBoundaryFetchRef = useRef<string | null>(null);
   const focusScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewportResizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollAnimationFrameRef = useRef<number | null>(null);
@@ -1330,32 +1331,86 @@ function ChatPage() {
     const latestMessage = visible[visible.length - 1];
 
     if (!initialScrollDoneRef.current) {
-      initialScrollDoneRef.current = true;
-
       // Read persisted state synchronously as well, so a route reuse never
       // briefly jumps to the end before restoring the unread boundary.
       const separatorForEntry =
         activeNewMessagesSeparator ?? readNewMessagesSeparator(meId, conversationId);
+
       if (separatorForEntry) {
         if (!activeNewMessagesSeparator) setNewMessagesSeparator(separatorForEntry);
         const target = el.querySelector(
           `[data-msg-id="${separatorForEntry.firstMessageId}"]`,
         ) as HTMLElement | null;
+
         if (target) {
+          initialScrollDoneRef.current = true;
           const containerRect = el.getBoundingClientRect();
           const targetRect = target.getBoundingClientRect();
           const targetTop = el.scrollTop + targetRect.top - containerRect.top - 24;
           el.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
           return;
         }
+
+        // The boundary can be older than the latest message page after a
+        // refresh/cache reset. If it exists in memory but is outside the
+        // rendered slice, reveal enough messages to render it before choosing
+        // an entry position.
+        const boundaryExistsInCache = (msgs.data ?? []).some(
+          (message: any) => message.id === separatorForEntry.firstMessageId,
+        );
+        const boundaryIsVisible = allVisibleMessages.some(
+          (message: any) => message.id === separatorForEntry.firstMessageId,
+        );
+        if (boundaryExistsInCache && !boundaryIsVisible) {
+          // The stored boundary is no longer renderable (for example, it
+          // expired or was deleted), so there is no valid message to anchor to.
+          initialScrollDoneRef.current = true;
+          el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+          return;
+        }
+        if (boundaryIsVisible) {
+          setVisibleMessageLimit((limit) => Math.max(limit, msgs.data?.length ?? limit));
+          return;
+        }
+
+        // Never fall through to the chat end while a persisted new-message
+        // boundary is still being resolved. Fetch that exact message, merge it
+        // into the ordered cache, and let the next render scroll to it.
+        if (entryBoundaryFetchRef.current !== separatorForEntry.firstMessageId) {
+          entryBoundaryFetchRef.current = separatorForEntry.firstMessageId;
+          void getMsg({ data: { messageId: separatorForEntry.firstMessageId } })
+            .then((boundaryMessage: any) => {
+              if (boundaryMessage) {
+                queryClient.setQueryData<any[]>(["messages", conversationId], (current) =>
+                  mergeMessages(current ?? [], [boundaryMessage]),
+                );
+                const currentCount =
+                  queryClient.getQueryData<any[]>(["messages", conversationId])?.length ?? 0;
+                setVisibleMessageLimit((limit) => Math.max(limit, currentCount));
+              } else {
+                // The boundary may have expired or been deleted. Only in that
+                // case do we fall back to the end of the chat.
+                initialScrollDoneRef.current = true;
+                el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+              }
+            })
+            .catch(() => {
+              initialScrollDoneRef.current = true;
+              el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+            })
+            .finally(() => {
+              entryBoundaryFetchRef.current = null;
+            });
+        }
+        return;
       }
 
+      initialScrollDoneRef.current = true;
       // No new messages were found during catch-up: always land at the end,
       // even if some older messages still have stale unread receipts.
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       return;
     }
-
     const { scrollTop, scrollHeight, clientHeight } = el;
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 140;
     const shouldFollowNewMessage = messageCountChanged && (isNearBottom || latestMessage?.sender_id === meId);
@@ -1363,7 +1418,7 @@ function ChatPage() {
     if ((isNearBottom || shouldFollowNewMessage) && !userScrolledUpRef.current) {
       requestAnimationFrame(() => animateScrollToBottom());
     }
-  }, [activeNewMessagesSeparator?.firstMessageId, animateScrollToBottom, conversationId, meId, refreshingOnEntry, visibleMessages, msgs.data]);
+  }, [activeNewMessagesSeparator?.firstMessageId, animateScrollToBottom, conversationId, getMsg, meId, queryClient, refreshingOnEntry, visibleMessages, msgs.data]);
 
   // If a separator is added or updated after the initial scroll, keep the oldest
   // missed message visible. During entry catch-up, wait so we don't jump to the
