@@ -85,7 +85,7 @@ export function mergeRealtimeMessage(existing: any[], msg: any): any[] {
 
   // Already present — update in place
   if (list.some((item) => item.id === msg.id)) {
-    return list.map((item) =>
+    const updated = list.map((item) =>
       item.id === msg.id
         ? {
             ...item,
@@ -97,6 +97,10 @@ export function mergeRealtimeMessage(existing: any[], msg: any): any[] {
             is_optimistic: false,
           }
         : item,
+    );
+    return updated.sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      || String(a.id).localeCompare(String(b.id)),
     );
   }
 
@@ -121,13 +125,19 @@ export function mergeRealtimeMessage(existing: any[], msg: any): any[] {
           saved_by_me: msg.saved_by_me ?? item.saved_by_me ?? false,
           replied_message: msg.replied_message ?? item.replied_message ?? null,
         };
-        return copy;
+        return copy.sort((a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          || String(a.id).localeCompare(String(b.id)),
+        );
       }
     }
   }
 
   // Append new message, keep sorted
   const result = [...list, { ...msg, is_optimistic: false }];
-  result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  result.sort((a, b) =>
+    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    || String(a.id).localeCompare(String(b.id)),
+  );
   return result;
 }

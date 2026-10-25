@@ -139,13 +139,15 @@ function getActiveConversationIdFromPath() {
 
 export function isConversationActive(conversationId: string) {
   if (!conversationId) return false;
-  if (typeof document !== "undefined" && (document.visibilityState !== "visible" || !document.hasFocus())) {
-    return false;
-  }
+
+  // The route is the source of truth for which chat is open. Suppress that
+  // conversation's notifications even if the browser tab/window loses focus;
+  // otherwise a message can trigger a notification while its chat is still open.
+  const activePathConversationId = getActiveConversationIdFromPath();
+  if (activePathConversationId === conversationId) return true;
   if (activeConversationId === conversationId) return true;
 
-  const activePathConversationId = getActiveConversationIdFromPath();
-  return activePathConversationId === conversationId;
+  return false;
 }
 
 export function subscribeToMessageNotifications(
