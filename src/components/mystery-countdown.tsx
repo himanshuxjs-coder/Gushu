@@ -53,6 +53,7 @@ export function MysteryCountdown() {
         scheduleNextSecond();
       } else if (timeout) {
         clearTimeout(timeout);
+        timeout = undefined;
       }
     };
 
