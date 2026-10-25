@@ -62,12 +62,13 @@ export function mergeMessages(existing: any[], incoming: any[]): any[] {
     }
   }
 
-  // Sort ascending by created_at, fallback to insertion order for equal timestamps
+  // Use the same deterministic timestamp + ID ordering as server pagination.
+  // This keeps equal-timestamp messages in a stable order across page boundaries.
   const result = Array.from(map.values());
   result.sort((a, b) => {
     const ta = new Date(a.created_at).getTime();
     const tb = new Date(b.created_at).getTime();
-    return ta - tb;
+    return ta - tb || String(a.id).localeCompare(String(b.id));
   });
   return result;
 }

@@ -50,7 +50,7 @@ const WALLPAPER_STYLE: Record<string, string> = {
   aurora: "",
 };
 
-const MESSAGE_PAGE_SIZE = 100;
+const MESSAGE_PAGE_SIZE = 50;
 
 type NewMessagesSeparatorState = {
   conversationId: string;
@@ -407,6 +407,7 @@ function ChatPage() {
             queryClient.setQueryData(["messages-pagination", conversationId], {
               hasMoreOlder: cached.length >= MESSAGE_PAGE_SIZE,
               beforeCreatedAt: cached[0]?.created_at ?? null,
+              beforeId: cached[0]?.id ?? null,
             });
             return cached;
           }
@@ -442,6 +443,7 @@ function ChatPage() {
           queryClient.setQueryData(["messages-pagination", conversationId], {
             hasMoreOlder: page.hasMoreOlder,
             beforeCreatedAt: page.nextBeforeCreatedAt,
+            beforeId: page.nextBeforeId,
           });
         }
         await writeCachedMessages(meId, conversationId, merged).catch(() => {});
@@ -453,6 +455,7 @@ function ChatPage() {
           queryClient.setQueryData(["messages-pagination", conversationId], {
             hasMoreOlder: cached.length >= MESSAGE_PAGE_SIZE,
             beforeCreatedAt: cached[0]?.created_at ?? null,
+            beforeId: cached[0]?.id ?? null,
           });
           return cached;
         }
@@ -617,7 +620,7 @@ function ChatPage() {
 
   const pagination = useQuery({
     queryKey: ["messages-pagination", conversationId],
-    queryFn: async () => ({ hasMoreOlder: false, beforeCreatedAt: null as string | null }),
+    queryFn: async () => ({ hasMoreOlder: false, beforeCreatedAt: null as string | null, beforeId: null as string | null }),
     enabled: false,
   });
 
@@ -701,37 +704,44 @@ function ChatPage() {
         return;
       }
 
-      const beforeCreatedAt = pagination.data?.beforeCreatedAt ?? current[0]?.created_at;
+      let beforeCreatedAt = pagination.data?.beforeCreatedAt ?? current[0]?.created_at;
+      let beforeId = pagination.data?.beforeId ?? current[0]?.id;
       if (!beforeCreatedAt || !pagination.data?.hasMoreOlder) {
         preserveScrollRef.current = null;
         return;
       }
 
-      const page = await listMsgs({
-        data: {
-          conversationId,
-          beforeCreatedAt,
-          limit: MESSAGE_PAGE_SIZE,
-        },
-      });
-
-      if (page.messages.length === 0) {
-        preserveScrollRef.current = null;
-        queryClient.setQueryData(["messages-pagination", conversationId], {
-          hasMoreOlder: false,
-          beforeCreatedAt: null,
+      // Expired messages are filtered by the server after paging. Keep advancing
+      // the raw keyset cursor until a page contains visible messages or history ends.
+      let page: any;
+      do {
+        page = await listMsgs({
+          data: {
+            conversationId,
+            beforeCreatedAt,
+            ...(beforeId ? { beforeId } : {}),
+            limit: MESSAGE_PAGE_SIZE,
+          },
         });
-        return;
-      }
 
-      queryClient.setQueryData<any[]>(["messages", conversationId], (old) =>
-        mergeMessages(old ?? [], page.messages),
-      );
-      queryClient.setQueryData(["messages-pagination", conversationId], {
-        hasMoreOlder: page.hasMoreOlder,
-        beforeCreatedAt: page.nextBeforeCreatedAt,
-      });
-      setVisibleMessageLimit((limit) => limit + MESSAGE_PAGE_SIZE);
+        queryClient.setQueryData(["messages-pagination", conversationId], {
+          hasMoreOlder: page.hasMoreOlder,
+          beforeCreatedAt: page.nextBeforeCreatedAt,
+          beforeId: page.nextBeforeId,
+        });
+
+        if (page.messages.length > 0) {
+          queryClient.setQueryData<any[]>(["messages", conversationId], (old) =>
+            mergeMessages(old ?? [], page.messages),
+          );
+          setVisibleMessageLimit((limit) => limit + MESSAGE_PAGE_SIZE);
+          break;
+        }
+
+        beforeCreatedAt = page.nextBeforeCreatedAt;
+        beforeId = page.nextBeforeId;
+        if (!page.hasMoreOlder || !beforeCreatedAt || !beforeId) break;
+      } while (true);
     } catch {
       preserveScrollRef.current = null;
       toast.error("Could not load earlier messages");
