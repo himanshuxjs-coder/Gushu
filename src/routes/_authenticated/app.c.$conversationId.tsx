@@ -1549,6 +1549,14 @@ function ChatPage() {
         });
         isNearBottomRef.current = isAtBottom;
 
+        // Reaching the end of the conversation completes the unread-message
+        // boundary, even if some messages were skipped during a fast scroll.
+        if (isAtBottom) {
+          setNewMessagesSeparator((current) =>
+            current?.conversationId === conversationId ? null : current,
+          );
+        }
+
         // Detect intentional upward scroll
         if (scrollTop < lastScrollTopRef.current && !isAnimatingScrollRef.current) {
           userScrolledUpRef.current = true;
