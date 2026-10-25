@@ -1123,3 +1123,36 @@
 @media (prefers-reduced-motion: reduce) {
   .birthday-gift { animation: none; }
 }
+
+
+/* Borderless, modern countdown surface — keep the typography and gifts in focus. */
+.mystery-countdown {
+  border: 0 !important;
+  outline: 0;
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, #f0d49a, transparent 91%), transparent 62%),
+    radial-gradient(ellipse at 100% 100%, color-mix(in srgb, var(--brand-violet), transparent 96%), transparent 58%);
+  box-shadow: none;
+}
+.mystery-countdown::after {
+  content: none !important;
+  display: none !important;
+}
+.mystery-countdown::before {
+  opacity: 0.12;
+}
+.mystery-countdown-cell {
+  border: 0;
+  border-radius: 10px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, white, transparent 93%), transparent 54%),
+    color-mix(in srgb, var(--muted), transparent 32%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white, transparent 82%),
+    0 4px 12px -10px color-mix(in srgb, var(--foreground), transparent 48%);
+}
+.birthday-daily-message {
+  border-top: 0;
+  padding-top: 0.25rem;
+}
