@@ -100,12 +100,15 @@ export const ConversationList = memo(function ConversationList({
     if (item && (item.locked || item.hidden || item.hasPin || item.hasSecretCode)) {
       queryClient.setQueryData(
         ["conv-settings", conversationId],
-        (current: any) => current ?? {
-          is_hidden: !!item.hidden || !!item.hasSecretCode,
-          is_locked: !!item.locked,
-          pin_hash: item.hasPin ? "device-locked" : null,
-          secret_code_hash: item.hasSecretCode ? "device-locked" : null,
-        },
+        (current: any) => ({
+          ...(current ?? {}),
+          // Never let stale cached "unlocked" metadata override a lock shown by
+          // the inbox. The authoritative server response will reconcile this.
+          is_hidden: !!current?.is_hidden || !!item.hidden || !!item.hasSecretCode,
+          is_locked: !!current?.is_locked || !!item.locked,
+          pin_hash: current?.pin_hash ?? (item.hasPin ? "device-locked" : null),
+          secret_code_hash: current?.secret_code_hash ?? (item.hasSecretCode ? "device-locked" : null),
+        }),
         { updatedAt: 0 },
       );
     }
