@@ -118,6 +118,10 @@ function ChatPage() {
   const messageSyncRequestedRef = useRef(false);
   const protectedMessagesPrefetchRef = useRef<any[] | null>(null);
 
+  useEffect(() => {
+    protectedMessagesPrefetchRef.current = null;
+  }, [conversationId]);
+
   const conv = useQuery({
     queryKey: ["conversation", conversationId],
     queryFn: async () => {
