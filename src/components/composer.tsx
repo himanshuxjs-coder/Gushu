@@ -674,20 +674,33 @@ export function Composer({
         e instanceof TypeError ||
         /network|fetch|connection|timeout/i.test(String(e?.message ?? ""));
 
-      if (queuedLocally && networkFailure) {
-        toast.message("Saved on this device. It will send when you are online.");
+      // Once the message is in the durable outbox, never discard it just
+      // because the request failed or timed out. The server may have accepted
+      // it even when the response was lost; the stable message ID makes retry
+      // idempotent and the outbox reconciles it on the next sync.
+      if (queuedLocally) {
+        if (networkFailure) {
+          toast.message("Saved on this device. It will send when you are online.");
+        } else {
+          toast.error("Could not confirm delivery. Your message is saved for retry.");
+        }
+        queryClient.setQueryData(queryKey, (old: any) =>
+          (old || []).map((msg: any) =>
+            msg.id === optimisticId
+              ? { ...msg, is_optimistic: false, send_failed: !networkFailure }
+              : msg,
+          ),
+        );
       } else {
-        if (queuedLocally) await removePendingTextMessage(optimisticId).catch(() => {});
-        toast.error(e?.message ?? "Send failed");
+        toast.error(e?.message ?? "Send failed. Please try again.");
         setText((current) => current || content);
-        queryClient.setQueryData(queryKey, (old: any) => {
-          return (old || []).map((msg: any) => {
-            if (msg.id === optimisticId) {
-              return { ...msg, is_optimistic: false, send_failed: true };
-            }
-            return msg;
-          });
-        });
+        queryClient.setQueryData(queryKey, (old: any) =>
+          (old || []).map((msg: any) =>
+            msg.id === optimisticId
+              ? { ...msg, is_optimistic: false, send_failed: true }
+              : msg,
+          ),
+        );
       }
     } finally {
       submittingRef.current = Math.max(0, submittingRef.current - 1);

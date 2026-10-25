@@ -42,6 +42,7 @@ export function UserSearch() {
   const unlockHidden = useHiddenStore((s: any) => s.unlock);
   const ref = useRef<HTMLDivElement>(null);
   const requestIdRef = useRef(0);
+  const openingUserIdRef = useRef<string | null>(null);
   const searchCacheRef = useRef(new Map<string, { results: R[]; savedAt: number }>());
   const [profileOpen, setProfileOpen] = useState(false);
   const [fullProfile, setFullProfile] = useState<any>(null);
@@ -130,29 +131,28 @@ export function UserSearch() {
   }, []);
 
   async function start(user: R) {
-    if (openingUserId) return;
+    // State updates are asynchronous; use a ref to block same-tick double taps.
+    if (openingUserIdRef.current) return;
+    openingUserIdRef.current = user.id;
     setOpeningUserId(user.id);
     try {
       const { id } = await create({ data: { otherUserId: user.id } });
 
-      // Check if this conversation requires a secret code
       const access = await checkAccess({ data: { conversationId: id } });
-
       if (access.requiresSecretCode) {
-        // Block access - require secret code
         setSecretCodePrompt({ user, conversationId: id });
-        setOpeningUserId(null);
         setOpen(false);
         return;
       }
 
       setQ("");
       setOpen(false);
-      navigate({ to: "/app/c/$conversationId", params: { conversationId: id } });
-      setOpeningUserId(null);
+      await navigate({ to: "/app/c/$conversationId", params: { conversationId: id } });
     } catch (e: any) {
-      setOpeningUserId(null);
       toast.error(e?.message ?? "Could not start chat");
+    } finally {
+      openingUserIdRef.current = null;
+      setOpeningUserId(null);
     }
   }
 
@@ -248,6 +248,12 @@ export function UserSearch() {
               <div
                 key={u.id}
                 aria-busy={openingUserId === u.id}
+                onClick={(event) => {
+                  // Clicking unused space in a result row should open the chat;
+                  // inner buttons keep their own actions (profile/open chat).
+                  if ((event.target as HTMLElement).closest("button")) return;
+                  void start(u);
+                }}
                 className={cn(
                   "interactive-row relative flex w-full items-center gap-3 overflow-hidden rounded-xl p-2.5 text-left transition-[background-color,box-shadow,transform] duration-200 group animate-in-fade",
                   openingUserId === u.id
