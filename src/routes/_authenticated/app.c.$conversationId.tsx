@@ -1332,9 +1332,14 @@ function ChatPage() {
     if (!initialScrollDoneRef.current) {
       initialScrollDoneRef.current = true;
 
-      if (newMessagesSeparator) {
+      // Read persisted state synchronously as well, so a route reuse never
+      // briefly jumps to the end before restoring the unread boundary.
+      const separatorForEntry =
+        activeNewMessagesSeparator ?? readNewMessagesSeparator(meId, conversationId);
+      if (separatorForEntry) {
+        if (!activeNewMessagesSeparator) setNewMessagesSeparator(separatorForEntry);
         const target = el.querySelector(
-          `[data-msg-id="${newMessagesSeparator.firstMessageId}"]`,
+          `[data-msg-id="${separatorForEntry.firstMessageId}"]`,
         ) as HTMLElement | null;
         if (target) {
           const containerRect = el.getBoundingClientRect();
@@ -1358,17 +1363,18 @@ function ChatPage() {
     if ((isNearBottom || shouldFollowNewMessage) && !userScrolledUpRef.current) {
       requestAnimationFrame(() => animateScrollToBottom());
     }
-  }, [animateScrollToBottom, meId, newMessagesSeparator, refreshingOnEntry, visibleMessages, msgs.data]);
+  }, [activeNewMessagesSeparator?.firstMessageId, animateScrollToBottom, conversationId, meId, refreshingOnEntry, visibleMessages, msgs.data]);
 
   // If a separator is added or updated after the initial scroll, keep the oldest
   // missed message visible. During entry catch-up, wait so we don't jump to the
   // bottom before the server response tells us whether there are new messages.
   useLayoutEffect(() => {
-    if (refreshingOnEntry || !newMessagesSeparator) return;
+    const firstMessageId = activeNewMessagesSeparator?.firstMessageId;
+    if (refreshingOnEntry || !firstMessageId) return;
     const el = scrollRef.current;
     if (!el) return;
     const target = el.querySelector(
-      `[data-msg-id="${newMessagesSeparator.firstMessageId}"]`,
+      `[data-msg-id="${firstMessageId}"]`,
     ) as HTMLElement | null;
     if (target) {
       const containerRect = el.getBoundingClientRect();
@@ -1376,7 +1382,7 @@ function ChatPage() {
       const targetTop = el.scrollTop + targetRect.top - containerRect.top - 24;
       el.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
     }
-  }, [newMessagesSeparator, refreshingOnEntry, visibleMessages]);
+  }, [activeNewMessagesSeparator?.firstMessageId, refreshingOnEntry, visibleMessages]);
 
   // Self-Destruct Messages: Client-side timer cleanup
   // Schedule removal for messages with expires_at (mirrored from delete_after).
@@ -1534,7 +1540,7 @@ function ChatPage() {
       el.removeEventListener("touchstart", handleUserScrollInterruption);
       el.removeEventListener("pointerdown", handleUserScrollInterruption);
     };
-  }, [cancelScrollAnimation, isChatActuallyViewed, markSeenNow, unreadMessageCount, isMobile, msgs.data, newMessagesSeparator]);
+  }, [cancelScrollAnimation, isChatActuallyViewed, markSeenNow, unreadMessageCount, isMobile, msgs.data]);
 
   useEffect(() => {
     return () => {
@@ -1787,8 +1793,8 @@ function ChatPage() {
             )}
             {(() => {
               const filtered = visibleMessages;
-              const separatorIndex = newMessagesSeparator
-                ? filtered.findIndex((message: any) => message.id === newMessagesSeparator.firstMessageId)
+              const separatorIndex = activeNewMessagesSeparator
+                ? filtered.findIndex((message: any) => message.id === activeNewMessagesSeparator.firstMessageId)
                 : -1;
 
               let prevDate: Date | null = null;
@@ -1810,11 +1816,11 @@ function ChatPage() {
                 return (
                   <div key={m.id} data-msg-id={m.id}>
                     {showDateSeparator && <DateSeparator date={currentDate} />}
-                    {idx === separatorIndex && newMessagesSeparator && (
-                      <div className="my-4 flex items-center gap-3" role="status" aria-label={`${newMessagesSeparator.count} new messages`}>
+                    {idx === separatorIndex && activeNewMessagesSeparator && (
+                      <div className="my-4 flex items-center gap-3" role="status" aria-label={`${activeNewMessagesSeparator.count} new messages`}>
                         <span className="h-px flex-1 bg-red-500" />
                         <span className="shrink-0 rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white shadow-sm">
-                          {newMessagesSeparator.count} new messages
+                          {activeNewMessagesSeparator.count} new messages
                         </span>
                         <span className="h-px flex-1 bg-red-500" />
                       </div>
