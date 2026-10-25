@@ -10,6 +10,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar } from "@/components/avatar";
 import { UserSearch } from "@/components/user-search";
 import { ConversationList } from "@/components/conversation-list";
+import { MysteryCountdown } from "@/components/mystery-countdown";
 import { ProfileView } from "@/components/profile-view";
 import { Button } from "@/components/ui/button";
 import { listMyConversations } from "@/lib/conversations.functions";
@@ -481,6 +482,10 @@ function AppShell() {
             />
           )}
         </nav>
+
+        <div className="mystery-countdown-placement">
+          <MysteryCountdown />
+        </div>
 
         <div className="section-reveal border-t border-border/70 bg-card/45 p-4 backdrop-blur-xl">
           <div className="flex items-center gap-3 cursor-pointer group" onClick={openProfile}>
