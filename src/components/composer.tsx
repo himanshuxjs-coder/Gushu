@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { useRef, useState, useEffect, useCallback, lazy, Suspense, memo } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
 import { Paperclip, Send, Smile, Loader as Loader2, X, Mic, Camera, CalendarClock, ChevronUp, Pencil, Trash2 } from "lucide-react";
@@ -89,8 +89,7 @@ export function Composer({
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentRef = useRef<number>(0);
   const draftChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const draftDebounceRef = useRef<NodeJS.Timeout | null>(null);
-  const draftAnimationFrameRef = useRef<number | null>(null);
+  const draftDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDraftTextRef = useRef<string>("");
   const onTypingChangeRef = useRef(onTypingChange);
   const onDraftChangeRef = useRef(onDraftChange);
@@ -344,47 +343,34 @@ export function Composer({
     [conversationId, setTypingStatus, clearTypingStatus, meId],
   );
 
-  // Broadcast draft text with debounce (~100ms)
+  // Draft previews are best-effort: debounce network broadcasts so typing
+  // stays local and responsive instead of sending a Realtime event per keystroke.
   const broadcastDraft = useCallback(
     (currentText: string) => {
       if (!draftPreviewEnabled || !draftChannelRef.current) return;
 
-      // Clear any pending debounce
       if (draftDebounceRef.current) {
         clearTimeout(draftDebounceRef.current);
         draftDebounceRef.current = null;
       }
-      if (draftAnimationFrameRef.current) {
-        cancelAnimationFrame(draftAnimationFrameRef.current);
-        draftAnimationFrameRef.current = null;
-      }
 
-      // Only broadcast if text actually changed
-      if (currentText === lastDraftTextRef.current) return;
-      lastDraftTextRef.current = currentText;
-
-      draftAnimationFrameRef.current = requestAnimationFrame(() => {
+      draftDebounceRef.current = setTimeout(() => {
+        draftDebounceRef.current = null;
         if (!draftChannelRef.current) return;
 
         const trimmed = currentText.trim();
-        if (trimmed) {
-          draftChannelRef.current
-            .send({
-              type: "broadcast",
-              event: "draft",
-              payload: { userId: meId, text: trimmed },
-            })
-            .catch(() => {});
-        } else {
-          draftChannelRef.current
-            .send({
-              type: "broadcast",
-              event: "draft-clear",
-              payload: { userId: meId },
-            })
-            .catch(() => {});
-        }
-      });
+        if (trimmed === lastDraftTextRef.current) return;
+
+        const channel = draftChannelRef.current;
+        const event = trimmed ? "draft" : "draft-clear";
+        const payload = trimmed
+          ? { userId: meId, text: trimmed }
+          : { userId: meId };
+
+        // Mark only when the broadcast is actually queued, not on each keystroke.
+        lastDraftTextRef.current = trimmed;
+        channel.send({ type: "broadcast", event, payload }).catch(() => {});
+      }, 140);
     },
     [draftPreviewEnabled, meId],
   );
@@ -872,7 +858,7 @@ export function Composer({
           className="min-h-[40px] flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-sm focus-visible:ring-0 sm:py-2"
         />
 
-        <EmojiPickerWrapper text={text} setText={setText} />
+        <EmojiPickerWrapper setText={setText} />
 
         {!text.trim() && !busy && (
           <div className="flex items-center gap-1 sm:gap-2">
@@ -981,7 +967,7 @@ export function Composer({
   );
 }
 
-function EmojiPickerWrapper({ text, setText }: { text: string; setText: (t: string | ((prev: string) => string)) => void }) {
+const EmojiPickerWrapper = memo(function EmojiPickerWrapper({ setText }: { setText: (t: string | ((prev: string) => string)) => void }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
 
@@ -1039,4 +1025,4 @@ function EmojiPickerWrapper({ text, setText }: { text: string; setText: (t: stri
       </PopoverContent>
     </Popover>
   );
-}
+});
