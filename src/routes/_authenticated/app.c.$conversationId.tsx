@@ -472,9 +472,9 @@ function ChatPage() {
   // newer than the local cache. Watching the URL also covers routers that retain
   // the route component while navigating between the list and a conversation.
   useEffect(() => {
-    // This effect lives only on the conversation route. Do not gate it on a
-    // hand-built pathname string: router base paths or trailing slashes could
-    // otherwise silently skip the catch-up when returning from the chat list.
+    // Every return from the inbox is a fresh entry: wait for catch-up, then
+    // anchor to the persisted separator again instead of keeping the old scroll.
+    initialScrollDoneRef.current = false;
     let cancelled = false;
     setRefreshingOnEntry(true);
 
