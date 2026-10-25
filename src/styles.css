@@ -1156,3 +1156,97 @@
   border-top: 0;
   padding-top: 0.25rem;
 }
+
+
+/* Final countdown polish: one refined gradient outline, glassy depth, and crisp timer tiles. */
+.mystery-countdown {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid transparent !important;
+  border-radius: 18px;
+  background:
+    linear-gradient(color-mix(in srgb, var(--card), transparent 3%), color-mix(in srgb, var(--card), transparent 3%)) padding-box,
+    linear-gradient(125deg,
+      color-mix(in srgb, #d8b66f, transparent 8%),
+      color-mix(in srgb, #a78bfa, transparent 22%) 48%,
+      color-mix(in srgb, #67d8f2, transparent 18%)) border-box;
+  box-shadow:
+    0 10px 30px -24px color-mix(in srgb, var(--brand-violet), transparent 20%),
+    inset 0 1px 0 color-mix(in srgb, white, transparent 82%);
+  transition: box-shadow 240ms ease, transform 240ms ease;
+}
+.mystery-countdown:hover {
+  box-shadow:
+    0 12px 32px -22px color-mix(in srgb, var(--brand-violet), transparent 5%),
+    inset 0 1px 0 color-mix(in srgb, white, transparent 78%);
+}
+.mystery-countdown::after {
+  content: none !important;
+  display: none !important;
+}
+.mystery-countdown-toggle {
+  border-radius: 12px;
+  transition: background 180ms ease, transform 180ms ease;
+}
+.mystery-countdown-toggle:hover {
+  background: color-mix(in srgb, var(--brand-violet), transparent 94%);
+}
+.mystery-countdown-orbit {
+  border: 1px solid color-mix(in srgb, #bda0ff, transparent 28%);
+  background: linear-gradient(145deg,
+    color-mix(in srgb, #bda0ff, transparent 83%),
+    color-mix(in srgb, #75d9f4, transparent 90%));
+  box-shadow: 0 0 16px color-mix(in srgb, #a78bfa, transparent 83%);
+}
+.mystery-countdown-eyebrow {
+  color: color-mix(in srgb, var(--muted-foreground), #a78bfa 28%);
+  font-weight: 700;
+  letter-spacing: 0.24em;
+}
+.mystery-countdown-title {
+  letter-spacing: -0.025em;
+  font-weight: 650;
+}
+.mystery-countdown-clock {
+  gap: 5px;
+  margin-top: 0.85rem;
+}
+.mystery-countdown-cell {
+  border: 1px solid color-mix(in srgb, var(--border), #a78bfa 20%);
+  border-radius: 11px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, white, transparent 91%), transparent 58%),
+    color-mix(in srgb, var(--muted), transparent 20%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white, transparent 75%),
+    0 5px 14px -12px color-mix(in srgb, var(--foreground), transparent 35%);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+.mystery-countdown-cell:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, #a78bfa, var(--border) 42%);
+}
+.mystery-countdown-digit {
+  font-variant-numeric: tabular-nums;
+  text-shadow: none;
+}
+.mystery-countdown-separator {
+  color: color-mix(in srgb, #bda0ff, #d9b977 35%);
+}
+.birthday-daily-message {
+  opacity: 0.92;
+  line-height: 1.6;
+}
+.mystery-countdown-details {
+  border-top-color: color-mix(in srgb, var(--border), #a78bfa 24%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mystery-countdown,
+  .mystery-countdown-cell,
+  .mystery-countdown-toggle {
+    transition: none;
+  }
+  .mystery-countdown-cell:hover {
+    transform: none;
+  }
+}
