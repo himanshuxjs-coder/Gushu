@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { Clock3, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 /**
  * A purely local countdown to midnight at the start of 23 Dec 2026
@@ -185,10 +185,6 @@ export function MysteryCountdown() {
         {palette.map((color, index) => <GiftBox key={index} color={color} index={index} />)}
       </div>
       <p className="birthday-daily-message" aria-live="polite">{message}</p>
-      <div className="mystery-countdown-foot">
-        <span><span className="mystery-countdown-live-dot" /> LOCAL TIME • ALWAYS TICKING</span>
-        <Clock3 size={11} aria-hidden="true" />
-      </div>
       <div className="mystery-countdown-details" hidden={!expanded}>
         <span>23 DEC</span>
         <span className="mystery-countdown-detail-rule" />
