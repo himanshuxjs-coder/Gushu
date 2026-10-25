@@ -36,9 +36,11 @@ export async function flushPendingTextMessages(userId: string) {
       }
 
       if (error) {
-        if (/network|fetch|timeout|connection/i.test(error.message)) break;
+        if (/network|fetch|timeout|connection|abort/i.test(error.message)) break;
+        // Keep failed rows in the durable outbox. A response can fail after the
+        // server accepted the insert, and the stable ID lets a later retry safely
+        // detect an existing row instead of losing the user's message.
         failedIds.push(pending.id);
-        await removePendingTextMessage(pending.id);
         continue;
       }
 
