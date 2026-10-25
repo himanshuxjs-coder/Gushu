@@ -412,10 +412,16 @@ function ChatPage() {
             return cached;
           }
         }
-        const previous = queryClient.getQueryData<any>(["messages", conversationId]) ?? [];
-        const isIncremental = previous.length > 0;
-        let cursor = isIncremental ? previous[previous.length - 1]?.created_at : undefined;
-        let cursorId = isIncremental ? previous[previous.length - 1]?.id : undefined;
+        const previous = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
+        // Optimistic/outbox messages can be newer than the server cursor. Never
+        // advance catch-up past one until the server confirms that exact row.
+        const confirmedPrevious = previous.filter(
+          (message: any) => !message.is_optimistic && !message.send_failed,
+        );
+        const newestConfirmed = confirmedPrevious[confirmedPrevious.length - 1];
+        const isIncremental = !!newestConfirmed;
+        let cursor = newestConfirmed?.created_at;
+        let cursorId = newestConfirmed?.id;
         let incoming: any[] = [];
         let page: any;
 
@@ -490,14 +496,16 @@ function ChatPage() {
       messageSyncInFlightRef.current = true;
       try {
         const cached = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
-        if (cached.length === 0) {
-          // A chat may be opened after navigating away while its query has no
-          // in-memory cache. Fetch the latest page directly instead of relying
-          // on React Query's stale-only refetch behavior.
+        const confirmedCached = cached.filter(
+          (message: any) => !message.is_optimistic && !message.send_failed,
+        );
+        if (confirmedCached.length === 0) {
+          // If the cache only contains unsent/uncertain local messages, fetch
+          // the latest server page and merge it without dropping those locals.
           const page = await listMsgs({
             data: { conversationId, limit: MESSAGE_PAGE_SIZE },
           });
-          const loaded = mergeMessages([], page.messages);
+          const loaded = mergeMessages(cached, page.messages);
           if (!cancelled) {
             queryClient.setQueryData(["messages", conversationId], loaded);
             queryClient.setQueryData(["messages-pagination", conversationId], {
@@ -513,8 +521,8 @@ function ChatPage() {
           return;
         }
 
-        let cursor: string | undefined = cached[cached.length - 1]?.created_at;
-        let cursorId: string | undefined = cached[cached.length - 1]?.id;
+        let cursor: string | undefined = confirmedCached[confirmedCached.length - 1]?.created_at;
+        let cursorId: string | undefined = confirmedCached[confirmedCached.length - 1]?.id;
         const incoming: any[] = [];
 
         while (cursor && cursorId) {
