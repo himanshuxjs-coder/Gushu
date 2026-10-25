@@ -201,9 +201,16 @@ function RootComponent() {
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-    void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((error) => {
-      console.warn("Offline app shell could not be installed:", error);
-    });
+    // Some deployments may not publish the generated worker. Check first so
+    // a missing optional offline worker does not create a registration failure.
+    void fetch("/sw.js", { method: "HEAD", cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) return;
+        return navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      })
+      .catch((error) => {
+        console.warn("Offline app shell could not be installed:", error);
+      });
   }, []);
 
   return (
