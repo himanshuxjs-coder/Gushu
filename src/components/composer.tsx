@@ -505,7 +505,9 @@ export function Composer({
 
   async function submit() {
     const content = text.trim();
-    if (!content || busy) return;
+    // Guard synchronously as well as through button state so rapid clicks,
+    // Enter + click, or touch events cannot create duplicate messages.
+    if (!content || busy || submittingRef.current > 0) return;
 
     if (content.length > MAX_MESSAGE_LENGTH) {
       toast.error("Message cannot exceed 4000 characters.");
@@ -514,6 +516,7 @@ export function Composer({
     }
 
     submittingRef.current += 1;
+    setBusy(true);
 
     const queryKey = ["messages", conversationId];
     const optimisticId = crypto.randomUUID();
@@ -603,9 +606,8 @@ export function Composer({
         })
         .select()
         .single();
-        await removePendingTextMessage(optimisticId).catch(() => {});
       if (sendError) throw sendError;
-      await removePendingTextMessage(optimisticId);
+      await removePendingTextMessage(optimisticId).catch(() => {});
 
       if (confirmedMessage) {
         queryClient.setQueryData(queryKey, (old: any) => {
@@ -689,6 +691,7 @@ export function Composer({
       }
     } finally {
       submittingRef.current = Math.max(0, submittingRef.current - 1);
+      setBusy(false);
       if (isMobile) refocusInput();
     }
   }
