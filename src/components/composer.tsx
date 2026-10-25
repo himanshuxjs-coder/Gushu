@@ -695,9 +695,26 @@ export function Composer({
     }
   }
 
+  const resizeComposerTextarea = useCallback(() => {
+    const element = textareaRef.current;
+    if (!element) return;
+
+    // Resize synchronously with the input event so deleting text also shrinks
+    // the composer immediately. Keep long messages inside a bounded viewport.
+    const maxHeight = 144;
+    element.style.height = "auto";
+    const nextHeight = Math.min(element.scrollHeight, maxHeight);
+    element.style.height = `${nextHeight}px`;
+    element.style.overflowY = element.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, []);
+
   const handleTextChange = useCallback(
     (value: string) => {
       const nextValue = value.length > MAX_MESSAGE_LENGTH ? value.slice(0, MAX_MESSAGE_LENGTH) : value;
+
+      // Do the lightweight DOM resize before scheduling React state updates,
+      // which keeps the text field feeling responsive when adding or deleting.
+      resizeComposerTextarea();
       setText(nextValue);
       handleTyping(nextValue);
       broadcastDraft(nextValue);
@@ -705,8 +722,13 @@ export function Composer({
         toast.error("Message cannot exceed 4000 characters.");
       }
     },
-    [handleTyping, broadcastDraft],
+    [handleTyping, broadcastDraft, resizeComposerTextarea],
   );
+
+  // Also size restored drafts and text inserted from the emoji picker.
+  useEffect(() => {
+    resizeComposerTextarea();
+  }, [text, resizeComposerTextarea]);
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key !== "Enter") return;
@@ -839,6 +861,7 @@ export function Composer({
           ref={textareaRef}
           value={text}
           onChange={(e) => handleTextChange(e.target.value)}
+          onInput={resizeComposerTextarea}
           onFocus={() => {
             setIsFocused(true);
             onFocus?.();
@@ -855,7 +878,7 @@ export function Composer({
           rows={1}
           placeholder="Type a message…"
           maxLength={MAX_MESSAGE_LENGTH}
-          className="min-h-[40px] flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-sm focus-visible:ring-0 sm:py-2"
+          className="min-h-[40px] max-h-36 flex-1 resize-none overflow-y-hidden border-0 bg-transparent px-2 py-2.5 text-sm leading-5 focus-visible:ring-0 sm:py-2"
         />
 
         <EmojiPickerWrapper setText={setText} />
