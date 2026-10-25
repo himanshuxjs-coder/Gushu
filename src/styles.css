@@ -839,3 +839,112 @@
   .mystery-countdown-live-dot { animation: none; }
   .mystery-countdown-chevron { transition: none; }
 }
+
+
+/* Birthday countdown: tiny dimensional gifts and a day-specific love note. */
+.mystery-countdown-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.mystery-countdown-heading-row .mystery-countdown-heading {
+  flex: 1;
+  min-width: 0;
+}
+.birthday-gifts {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 18px;
+  height: 55px;
+  margin: 0.8rem 0 0.35rem;
+  perspective: 240px;
+}
+.birthday-gift {
+  --gift-color: #ff8eaa;
+  position: relative;
+  display: block;
+  width: 29px;
+  height: 30px;
+  flex: 0 0 29px;
+  transform-style: preserve-3d;
+  filter: drop-shadow(0 5px 3px color-mix(in srgb, var(--gift-color), transparent 76%));
+  animation: birthday-gift-float 3.8s ease-in-out infinite;
+}
+.birthday-gift-2 { width: 34px; height: 36px; flex-basis: 34px; animation-delay: -1.2s; }
+.birthday-gift-3 { animation-delay: -2.4s; }
+.birthday-gift-front {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 75%;
+  height: 75%;
+  border-radius: 3px 2px 2px 3px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--gift-color), white 30%), var(--gift-color) 55%, color-mix(in srgb, var(--gift-color), black 13%));
+  box-shadow: inset 2px 0 0 rgb(255 255 255 / 28%), inset 0 -2px 0 rgb(0 0 0 / 8%);
+}
+.birthday-gift-side {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 27%;
+  height: 75%;
+  background: color-mix(in srgb, var(--gift-color), black 22%);
+  clip-path: polygon(0 0, 100% 14%, 100% 100%, 0 100%);
+  border-radius: 0 2px 2px 0;
+}
+.birthday-gift-lid {
+  position: absolute;
+  z-index: 2;
+  left: -3px;
+  top: 5px;
+  width: 84%;
+  height: 20%;
+  border-radius: 2px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gift-color), white 38%), var(--gift-color));
+  box-shadow: 0 2px 3px rgb(0 0 0 / 12%);
+}
+.birthday-gift-ribbon {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 43%;
+  width: 18%;
+  background: rgb(255 255 255 / 76%);
+  box-shadow: 0 0 3px rgb(255 255 255 / 28%);
+}
+.birthday-gift-lid::before,
+.birthday-gift-lid::after {
+  content: "";
+  position: absolute;
+  bottom: 55%;
+  width: 9px;
+  height: 7px;
+  border: 2px solid color-mix(in srgb, var(--gift-color), white 70%);
+  border-radius: 80% 80% 20% 80%;
+}
+.birthday-gift-lid::before { left: 29%; transform: rotate(28deg); }
+.birthday-gift-lid::after { left: 48%; transform: rotate(65deg) scaleX(-1); }
+.birthday-daily-message {
+  margin: 0.35rem 0 0;
+  padding: 0.65rem 0.25rem 0.1rem;
+  border-top: 1px solid color-mix(in srgb, var(--brand-violet), transparent 84%);
+  color: var(--foreground);
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: pretty;
+}
+@keyframes birthday-gift-float {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-3px) rotate(2deg); }
+}
+@media (max-width: 360px) {
+  .birthday-gifts { gap: 13px; }
+  .birthday-daily-message { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .birthday-gift { animation: none; }
+}
