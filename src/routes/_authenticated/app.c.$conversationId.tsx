@@ -52,6 +52,40 @@ const WALLPAPER_STYLE: Record<string, string> = {
 
 const MESSAGE_PAGE_SIZE = 100;
 
+type NewMessagesSeparatorState = {
+  conversationId: string;
+  firstMessageId: string;
+  lastMessageId: string;
+  messageIds: string[];
+  seenMessageIds: string[];
+  count: number;
+};
+
+function newMessagesSeparatorStorageKey(userId: string, conversationId: string) {
+  return `gushu:new-messages:${userId}:${conversationId}`;
+}
+
+function readNewMessagesSeparator(userId: string, conversationId: string): NewMessagesSeparatorState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(newMessagesSeparatorStorageKey(userId, conversationId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as NewMessagesSeparatorState;
+    if (
+      parsed?.conversationId !== conversationId ||
+      !parsed.firstMessageId ||
+      !Array.isArray(parsed.messageIds) ||
+      !Array.isArray(parsed.seenMessageIds)
+    ) return null;
+    if (parsed.messageIds.length > 0 && parsed.messageIds.every((id) => parsed.seenMessageIds.includes(id))) {
+      return null;
+    }
+    return { ...parsed, count: parsed.messageIds.length };
+  } catch {
+    return null;
+  }
+}
+
 function ChatPage() {
   const { conversationId } = Route.useParams();
   const location = useLocation();
@@ -111,7 +145,14 @@ function ChatPage() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [refreshingOnEntry, setRefreshingOnEntry] = useState(true);
   const [showWeakConnection, setShowWeakConnection] = useState(false);
-  const [newMessagesSeparator, setNewMessagesSeparator] = useState<{ firstMessageId: string; count: number } | null>(null);
+  const [newMessagesSeparator, setNewMessagesSeparator] = useState<NewMessagesSeparatorState | null>(
+    () => readNewMessagesSeparator(meId, conversationId),
+  );
+  const previousSeparatorRef = useRef<NewMessagesSeparatorState | null>(
+    readNewMessagesSeparator(meId, conversationId),
+  );
+  const activeNewMessagesSeparator =
+    newMessagesSeparator?.conversationId === conversationId ? newMessagesSeparator : null;
   // Share one incremental catch-up between chat entry and Realtime subscription recovery.
   const syncNewMessagesRef = useRef<(() => void) | null>(null);
   const messageSyncInFlightRef = useRef(false);
@@ -191,14 +232,113 @@ function ChatPage() {
         const timeDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         return timeDiff || String(a.id).localeCompare(String(b.id));
       });
-    // Messages returned by catch-up were absent locally. Do not suppress this
-    // marker based on potentially stale remote-presence information.
     if (!incoming.length) return;
 
-    // Keep the marker until the recipient reaches the latest message, so it
-    // cannot disappear while they are still catching up on missed messages.
-    setNewMessagesSeparator({ firstMessageId: incoming[0].id, count: incoming.length });
-  }, [meId]);
+    // Merge newly discovered messages into the existing unread group. This
+    // preserves the original boundary when several catch-ups happen.
+    setNewMessagesSeparator((current) => {
+      const existing = current?.conversationId === conversationId ? current : null;
+      const messageIds = Array.from(new Set([
+        ...(existing?.messageIds ?? []),
+        ...incoming.map((message: any) => message.id as string),
+      ]));
+      const seenMessageIds = (existing?.seenMessageIds ?? []).filter((id) => messageIds.includes(id));
+      return {
+        conversationId,
+        firstMessageId: existing?.firstMessageId ?? incoming[0].id,
+        lastMessageId: incoming[incoming.length - 1].id,
+        messageIds,
+        seenMessageIds,
+        count: messageIds.length,
+      };
+    });
+  }, [conversationId, meId]);
+
+  // Persist the unread boundary across inbox navigation, route remounts, and
+  // refreshes. A completed group removes its stored boundary.
+  useEffect(() => {
+    if (newMessagesSeparator?.conversationId === conversationId) {
+      try {
+        window.localStorage.setItem(
+          newMessagesSeparatorStorageKey(meId, conversationId),
+          JSON.stringify(newMessagesSeparator),
+        );
+      } catch {}
+      previousSeparatorRef.current = newMessagesSeparator;
+      return;
+    }
+
+    if (previousSeparatorRef.current?.conversationId === conversationId) {
+      try {
+        window.localStorage.removeItem(newMessagesSeparatorStorageKey(meId, conversationId));
+      } catch {}
+    }
+    previousSeparatorRef.current = null;
+  }, [conversationId, meId, newMessagesSeparator]);
+
+  // Restore the correct boundary if the router reuses this component for a
+  // different conversation.
+  useEffect(() => {
+    const restored = readNewMessagesSeparator(meId, conversationId);
+    setNewMessagesSeparator(restored);
+    previousSeparatorRef.current = restored;
+  }, [conversationId, meId]);
+
+  // A message counts as seen only after its bubble was actually visible in the
+  // chat viewport. Jumping straight to the end therefore cannot dismiss the
+  // separator for messages the user skipped.
+  useEffect(() => {
+    const separator = activeNewMessagesSeparator;
+    const pane = scrollRef.current;
+    if (!separator || !pane) return;
+
+    let frame = 0;
+    const checkVisibleNewMessages = () => {
+      if (document.visibilityState !== "visible" || !document.hasFocus()) return;
+      const paneRect = pane.getBoundingClientRect();
+      const newlySeen: string[] = [];
+
+      for (const id of separator.messageIds) {
+        if (separator.seenMessageIds.includes(id)) continue;
+        const node = pane.querySelector(`[data-msg-id="${id}"]`) as HTMLElement | null;
+        if (!node) continue;
+        const rect = node.getBoundingClientRect();
+        const visibleHeight = Math.max(0, Math.min(rect.bottom, paneRect.bottom) - Math.max(rect.top, paneRect.top));
+        const requiredHeight = Math.min(rect.height, pane.clientHeight) * 0.6;
+        if (visibleHeight > 0 && visibleHeight >= requiredHeight) newlySeen.push(id);
+      }
+
+      if (newlySeen.length) {
+        setNewMessagesSeparator((current) => {
+          if (!current || current.conversationId !== conversationId) return current;
+          const seenMessageIds = Array.from(new Set([...current.seenMessageIds, ...newlySeen]));
+          if (current.messageIds.every((id) => seenMessageIds.includes(id))) return null;
+          return { ...current, seenMessageIds };
+        });
+      }
+    };
+
+    const scheduleCheck = () => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(checkVisibleNewMessages);
+    };
+    pane.addEventListener("scroll", scheduleCheck, { passive: true });
+    window.addEventListener("focus", scheduleCheck);
+    document.addEventListener("visibilitychange", scheduleCheck);
+    scheduleCheck();
+
+    return () => {
+      pane.removeEventListener("scroll", scheduleCheck);
+      window.removeEventListener("focus", scheduleCheck);
+      document.removeEventListener("visibilitychange", scheduleCheck);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [
+    activeNewMessagesSeparator?.conversationId,
+    activeNewMessagesSeparator?.messageIds.join(","),
+    activeNewMessagesSeparator?.seenMessageIds.join(","),
+    conversationId,
+  ]);
 
   useEffect(() => {
     if (!settings?.is_locked || !settings.pin_hash || typeof window === "undefined") return;
@@ -332,9 +472,9 @@ function ChatPage() {
   // newer than the local cache. Watching the URL also covers routers that retain
   // the route component while navigating between the list and a conversation.
   useEffect(() => {
-    // This effect lives only on the conversation route. Do not gate it on a
-    // hand-built pathname string: router base paths or trailing slashes could
-    // otherwise silently skip the catch-up when returning from the chat list.
+    // Every return from the inbox is a fresh entry: wait for catch-up, then
+    // anchor to the persisted separator again instead of keeping the old scroll.
+    initialScrollDoneRef.current = false;
     let cancelled = false;
     setRefreshingOnEntry(true);
 
@@ -728,11 +868,6 @@ function ChatPage() {
                 },
               };
             }
-          }
-
-          // If the recipient replies, remove the missed-message marker immediately.
-          if (msg.sender_id === meId) {
-            setNewMessagesSeparator(null);
           }
 
           // Merge into cache — never replace the array
@@ -1197,9 +1332,14 @@ function ChatPage() {
     if (!initialScrollDoneRef.current) {
       initialScrollDoneRef.current = true;
 
-      if (newMessagesSeparator) {
+      // Read persisted state synchronously as well, so a route reuse never
+      // briefly jumps to the end before restoring the unread boundary.
+      const separatorForEntry =
+        activeNewMessagesSeparator ?? readNewMessagesSeparator(meId, conversationId);
+      if (separatorForEntry) {
+        if (!activeNewMessagesSeparator) setNewMessagesSeparator(separatorForEntry);
         const target = el.querySelector(
-          `[data-msg-id="${newMessagesSeparator.firstMessageId}"]`,
+          `[data-msg-id="${separatorForEntry.firstMessageId}"]`,
         ) as HTMLElement | null;
         if (target) {
           const containerRect = el.getBoundingClientRect();
@@ -1223,17 +1363,18 @@ function ChatPage() {
     if ((isNearBottom || shouldFollowNewMessage) && !userScrolledUpRef.current) {
       requestAnimationFrame(() => animateScrollToBottom());
     }
-  }, [animateScrollToBottom, meId, newMessagesSeparator, refreshingOnEntry, visibleMessages, msgs.data]);
+  }, [activeNewMessagesSeparator?.firstMessageId, animateScrollToBottom, conversationId, meId, refreshingOnEntry, visibleMessages, msgs.data]);
 
   // If a separator is added or updated after the initial scroll, keep the oldest
   // missed message visible. During entry catch-up, wait so we don't jump to the
   // bottom before the server response tells us whether there are new messages.
   useLayoutEffect(() => {
-    if (refreshingOnEntry || !newMessagesSeparator) return;
+    const firstMessageId = activeNewMessagesSeparator?.firstMessageId;
+    if (refreshingOnEntry || !firstMessageId) return;
     const el = scrollRef.current;
     if (!el) return;
     const target = el.querySelector(
-      `[data-msg-id="${newMessagesSeparator.firstMessageId}"]`,
+      `[data-msg-id="${firstMessageId}"]`,
     ) as HTMLElement | null;
     if (target) {
       const containerRect = el.getBoundingClientRect();
@@ -1241,7 +1382,7 @@ function ChatPage() {
       const targetTop = el.scrollTop + targetRect.top - containerRect.top - 24;
       el.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
     }
-  }, [newMessagesSeparator, refreshingOnEntry, visibleMessages]);
+  }, [activeNewMessagesSeparator?.firstMessageId, refreshingOnEntry, visibleMessages]);
 
   // Self-Destruct Messages: Client-side timer cleanup
   // Schedule removal for messages with expires_at (mirrored from delete_after).
@@ -1353,12 +1494,6 @@ function ChatPage() {
         });
         isNearBottomRef.current = isAtBottom;
 
-        // Once the recipient reaches the latest message, the missed-message
-        // divider has served its purpose and should disappear immediately.
-        if (isAtBottom && newMessagesSeparator) {
-          setNewMessagesSeparator(null);
-        }
-
         // Detect intentional upward scroll
         if (scrollTop < lastScrollTopRef.current && !isAnimatingScrollRef.current) {
           userScrolledUpRef.current = true;
@@ -1405,7 +1540,7 @@ function ChatPage() {
       el.removeEventListener("touchstart", handleUserScrollInterruption);
       el.removeEventListener("pointerdown", handleUserScrollInterruption);
     };
-  }, [cancelScrollAnimation, isChatActuallyViewed, markSeenNow, unreadMessageCount, isMobile, msgs.data, newMessagesSeparator]);
+  }, [cancelScrollAnimation, isChatActuallyViewed, markSeenNow, unreadMessageCount, isMobile, msgs.data]);
 
   useEffect(() => {
     return () => {
@@ -1658,8 +1793,8 @@ function ChatPage() {
             )}
             {(() => {
               const filtered = visibleMessages;
-              const separatorIndex = newMessagesSeparator
-                ? filtered.findIndex((message: any) => message.id === newMessagesSeparator.firstMessageId)
+              const separatorIndex = activeNewMessagesSeparator
+                ? filtered.findIndex((message: any) => message.id === activeNewMessagesSeparator.firstMessageId)
                 : -1;
 
               let prevDate: Date | null = null;
@@ -1681,11 +1816,11 @@ function ChatPage() {
                 return (
                   <div key={m.id} data-msg-id={m.id}>
                     {showDateSeparator && <DateSeparator date={currentDate} />}
-                    {idx === separatorIndex && newMessagesSeparator && (
-                      <div className="my-4 flex items-center gap-3" role="status" aria-label={`${newMessagesSeparator.count} new messages`}>
+                    {idx === separatorIndex && activeNewMessagesSeparator && (
+                      <div className="my-4 flex items-center gap-3" role="status" aria-label={`${activeNewMessagesSeparator.count} new messages`}>
                         <span className="h-px flex-1 bg-red-500" />
                         <span className="shrink-0 rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white shadow-sm">
-                          {newMessagesSeparator.count} new messages
+                          {activeNewMessagesSeparator.count} new messages
                         </span>
                         <span className="h-px flex-1 bg-red-500" />
                       </div>
