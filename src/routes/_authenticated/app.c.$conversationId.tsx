@@ -112,7 +112,6 @@ function ChatPage() {
   const [refreshingOnEntry, setRefreshingOnEntry] = useState(true);
   const [showWeakConnection, setShowWeakConnection] = useState(false);
   const [newMessagesSeparator, setNewMessagesSeparator] = useState<{ firstMessageId: string; count: number } | null>(null);
-  const newMessagesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Share one incremental catch-up between chat entry and Realtime subscription recovery.
   const syncNewMessagesRef = useRef<(() => void) | null>(null);
   const messageSyncInFlightRef = useRef(false);
@@ -196,18 +195,10 @@ function ChatPage() {
     // marker based on potentially stale remote-presence information.
     if (!incoming.length) return;
 
-    if (newMessagesTimerRef.current) clearTimeout(newMessagesTimerRef.current);
+    // Keep the marker until the recipient reaches the latest message, so it
+    // cannot disappear while they are still catching up on missed messages.
     setNewMessagesSeparator({ firstMessageId: incoming[0].id, count: incoming.length });
-    // Keep the marker for two minutes from when the recipient opens the missed messages.
-    newMessagesTimerRef.current = setTimeout(() => {
-      setNewMessagesSeparator(null);
-      newMessagesTimerRef.current = null;
-    }, 120_000);
   }, [meId]);
-
-  useEffect(() => () => {
-    if (newMessagesTimerRef.current) clearTimeout(newMessagesTimerRef.current);
-  }, []);
 
   useEffect(() => {
     if (!settings?.is_locked || !settings.pin_hash || typeof window === "undefined") return;
@@ -742,10 +733,6 @@ function ChatPage() {
           // If the recipient replies, remove the missed-message marker immediately.
           if (msg.sender_id === meId) {
             setNewMessagesSeparator(null);
-            if (newMessagesTimerRef.current) {
-              clearTimeout(newMessagesTimerRef.current);
-              newMessagesTimerRef.current = null;
-            }
           }
 
           // Merge into cache — never replace the array
@@ -1359,10 +1346,6 @@ function ChatPage() {
         // divider has served its purpose and should disappear immediately.
         if (isAtBottom && newMessagesSeparator) {
           setNewMessagesSeparator(null);
-          if (newMessagesTimerRef.current) {
-            clearTimeout(newMessagesTimerRef.current);
-            newMessagesTimerRef.current = null;
-          }
         }
 
         // Detect intentional upward scroll
