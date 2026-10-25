@@ -1127,9 +1127,14 @@ function ChatPage() {
 
     isAnimatingScrollRef.current = true;
 
-    const duration = Math.min(320, Math.max(160, Math.abs(distance) * 0.3));
+    // Keep the jump quick but visibly eased, even for long conversations.
+    const duration = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+      ? 1
+      : Math.min(560, Math.max(260, Math.abs(distance) * 0.16));
     const startTime = performance.now();
-    const ease = (t: number) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t);
+    const ease = (t: number) => t < 0.5
+      ? 4 * t * t * t
+      : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
     const step = (now: number) => {
       if (!scrollRef.current) {
@@ -1197,7 +1202,10 @@ function ChatPage() {
           `[data-msg-id="${newMessagesSeparator.firstMessageId}"]`,
         ) as HTMLElement | null;
         if (target) {
-          el.scrollTo({ top: Math.max(0, target.offsetTop - 24), behavior: "smooth" });
+          const containerRect = el.getBoundingClientRect();
+          const targetRect = target.getBoundingClientRect();
+          const targetTop = el.scrollTop + targetRect.top - containerRect.top - 24;
+          el.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
           return;
         }
       }
@@ -1228,7 +1236,10 @@ function ChatPage() {
       `[data-msg-id="${newMessagesSeparator.firstMessageId}"]`,
     ) as HTMLElement | null;
     if (target) {
-      el.scrollTo({ top: Math.max(0, target.offsetTop - 24), behavior: "smooth" });
+      const containerRect = el.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const targetTop = el.scrollTop + targetRect.top - containerRect.top - 24;
+      el.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
     }
   }, [newMessagesSeparator, refreshingOnEntry, visibleMessages]);
 
@@ -1587,26 +1598,26 @@ function ChatPage() {
           >
             {refreshingOnEntry && !!msgs.data?.length && (
               <div
-                className="sticky top-0 z-10 mx-auto w-full max-w-2xl space-y-2 rounded-xl border border-border/60 bg-background/90 p-3 shadow-sm backdrop-blur"
+                className="flex justify-start py-1"
                 role="status"
                 aria-live="polite"
                 aria-label="Checking for new messages"
               >
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
-                  Checking for new messages
+                <div className="max-w-[78%] min-w-36 rounded-2xl rounded-bl-md border border-border/50 bg-muted/55 px-4 py-3 shadow-sm">
+                  <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <Loader2 className="size-3 animate-spin" />
+                    <span>Checking for new messages</span>
+                  </div>
+                  <div className="space-y-2" aria-hidden="true">
+                    <div className="h-2 w-44 max-w-full animate-pulse rounded-full bg-foreground/10" />
+                    <div className="h-2 w-28 max-w-[75%] animate-pulse rounded-full bg-foreground/10" />
+                  </div>
+                  {showWeakConnection && (
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      Slow connection — still checking…
+                    </p>
+                  )}
                 </div>
-                <div className="flex justify-start">
-                  <div className="h-8 w-3/5 animate-pulse rounded-2xl rounded-bl-sm bg-muted/80" />
-                </div>
-                <div className="flex justify-end">
-                  <div className="h-8 w-2/5 animate-pulse rounded-2xl rounded-br-sm bg-muted/80" />
-                </div>
-                {showWeakConnection && (
-                  <p className="text-xs text-muted-foreground">
-                    Oops, you have a weak connection. We’re still checking for new messages.
-                  </p>
-                )}
               </div>
             )}
             {(visibleMessageLimit < allVisibleMessages.length || pagination.data?.hasMoreOlder) && (
@@ -1726,49 +1737,35 @@ function ChatPage() {
             className="pointer-events-none absolute bottom-[5.75rem] right-4 z-20 sm:right-8"
           />
 
-          {/* Modern floating "Go to Latest" button */}
+          {/* Floating one-click navigation to the latest message */}
           <div
             className={cn(
-              "absolute bottom-24 right-4 z-30 transition-all duration-300 ease-out",
+              "absolute bottom-24 right-4 z-30 transition-[opacity,transform] duration-300 ease-out",
               showJumpToLatestButton
-                ? "opacity-100 scale-100 translate-y-0"
-                : "opacity-0 scale-75 translate-y-4 pointer-events-none",
+                ? "translate-y-0 scale-100 opacity-100"
+                : "pointer-events-none translate-y-3 scale-95 opacity-0",
             )}
           >
             <button
               type="button"
               onClick={animateScrollToBottom}
               className={cn(
-                "relative flex items-center justify-center",
-                "size-12 rounded-full",
-                // Modern glassmorphism
-                "bg-gradient-to-br from-primary/90 via-primary to-primary/90",
-                "backdrop-blur-xl",
-                // Border and shadow
-                "border-2 border-white/20",
-                "shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.1)_inset]",
-                // Hover effects
-                "hover:scale-110 hover:shadow-[0_12px_40px_rgba(139,92,246,0.4)]",
-                // Active
-                "active:scale-95",
-                // Transition
-                "transition-all duration-200 ease-out",
+                "group relative inline-flex h-11 items-center gap-2 rounded-full border border-white/20",
+                "bg-gradient-to-r from-primary to-primary/90 px-4 text-sm font-semibold text-primary-foreground",
+                "shadow-[0_8px_28px_rgba(0,0,0,0.22)] backdrop-blur-xl",
+                "transition-[transform,box-shadow,filter] duration-200 ease-out",
+                "hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(0,0,0,0.28)]",
+                "active:translate-y-0 active:scale-[0.97]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               )}
-              aria-label={`Jump to latest${unreadBelowScroll > 0 ? ` (${unreadBelowScroll} unread)` : ""}`}
+              aria-label={`Go to end${unreadBelowScroll > 0 ? `, ${unreadBelowScroll} unread messages` : ""}`}
             >
-              <ArrowDown className="size-5 text-white" />
+              <span>Go to end</span>
+              <ArrowDown className="size-4 transition-transform duration-200 group-hover:translate-y-0.5" />
 
-              {/* Unread badge */}
               {unreadBelowScroll > 0 && (
                 <span
-                  className={cn(
-                    "absolute -top-1 -right-1 flex items-center justify-center",
-                    "min-w-5 h-5 px-1",
-                    "bg-gradient-to-br from-red-500 to-red-600",
-                    "text-white text-[10px] font-bold rounded-full",
-                    "shadow-[0_2px_8px_rgba(239,68,68,0.5)]",
-                    "animate-pulse",
-                  )}
+                  className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-background/20 px-1 text-[10px] font-bold text-primary-foreground"
                 >
                   {unreadBelowScroll > 99 ? "99+" : unreadBelowScroll}
                 </span>
