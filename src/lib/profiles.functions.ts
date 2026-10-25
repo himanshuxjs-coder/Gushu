@@ -39,7 +39,7 @@ export const searchUsers = createServerFn({ method: "POST" })
     if (usernameResult.error) throw new Error(usernameResult.error.message);
     if (displayNameResult.error) throw new Error(displayNameResult.error.message);
 
-    const profilesById = new Map<string, { id: string; username: string; display_name: string | null; avatar_url: string | null; verified: boolean }>();
+    const profilesById = new Map<string, any>();
     for (const profile of [...(usernameResult.data ?? []), ...(displayNameResult.data ?? [])]) {
       if (profile) profilesById.set(profile.id, profile);
     }
@@ -67,7 +67,7 @@ export const searchUsers = createServerFn({ method: "POST" })
       const username = profile.username.toLowerCase();
       const name = (profile.display_name ?? "").toLowerCase();
       if (username === normalizedUsernameQuery) return 0;
-      if (username.startsWith(normalizedUsernameQuery)) return 1;
+      if (normalizedUsernameQuery && username.startsWith(normalizedUsernameQuery)) return 1;
       if (name === normalizedQuery) return 2;
       if (name.startsWith(normalizedQuery)) return 3;
       return 4;
