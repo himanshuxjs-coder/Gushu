@@ -179,6 +179,25 @@ function AppShell() {
     refetchOnReconnect: false,
   });
 
+  // Refresh inbox metadata whenever the user returns from a conversation or another
+  // app section. listMyConversations returns each chat's latest preview/unread
+  // state, so this catches up other chats without downloading their full histories.
+  const previousPathRef = useRef(location.pathname);
+  useEffect(() => {
+    const previousPath = previousPathRef.current;
+    previousPathRef.current = location.pathname;
+
+    const isInboxRoot = location.pathname === "/app" || location.pathname === "/app/";
+    const wasInboxRoot = previousPath === "/app" || previousPath === "/app/";
+    if (!routeUser?.id || !isInboxRoot || wasInboxRoot) return;
+
+    void queryClient.refetchQueries({
+      queryKey: ["conversations"],
+      exact: true,
+      type: "active",
+    });
+  }, [location.pathname, queryClient, routeUser?.id]);
+
   // One inbox sync when the app resumes or connectivity returns; never poll.
   useEffect(() => {
     let syncTimer: ReturnType<typeof setTimeout> | null = null;

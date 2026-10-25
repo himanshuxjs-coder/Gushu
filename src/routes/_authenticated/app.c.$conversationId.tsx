@@ -1521,7 +1521,6 @@ function ChatPage() {
       settingsQuery?.isSuccess &&
       !isLocked &&
       !isHiddenLocked &&
-      !msgs.data?.length &&
       (msgs.isLoading || refreshingOnEntry);
 
     if (!isWaitingForInitialMessages) {
@@ -1612,6 +1611,30 @@ function ChatPage() {
             data-wallpaper={wallpaper}
             className={cn("message-stream chat-wallpaper min-h-0 flex-1 overflow-y-auto scroll-pb-32 px-4 py-6 pb-32 space-y-5 sm:px-8 sm:pb-28 no-scrollbar relative", wallpaperClass)}
           >
+            {refreshingOnEntry && !!msgs.data?.length && (
+              <div
+                className="sticky top-0 z-10 mx-auto w-full max-w-2xl space-y-2 rounded-xl border border-border/60 bg-background/90 p-3 shadow-sm backdrop-blur"
+                role="status"
+                aria-live="polite"
+                aria-label="Checking for new messages"
+              >
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Checking for new messages
+                </div>
+                <div className="flex justify-start">
+                  <div className="h-8 w-3/5 animate-pulse rounded-2xl rounded-bl-sm bg-muted/80" />
+                </div>
+                <div className="flex justify-end">
+                  <div className="h-8 w-2/5 animate-pulse rounded-2xl rounded-br-sm bg-muted/80" />
+                </div>
+                {showWeakConnection && (
+                  <p className="text-xs text-muted-foreground">
+                    Oops, you have a weak connection. We’re still checking for new messages.
+                  </p>
+                )}
+              </div>
+            )}
             {(visibleMessageLimit < allVisibleMessages.length || pagination.data?.hasMoreOlder) && (
               <button
                 type="button"
