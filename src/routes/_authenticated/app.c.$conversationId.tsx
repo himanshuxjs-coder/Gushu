@@ -1355,10 +1355,20 @@ function ChatPage() {
         // refresh/cache reset. If it exists in memory but is outside the
         // rendered slice, reveal enough messages to render it before choosing
         // an entry position.
-        const cachedBoundary = (msgs.data ?? []).some(
+        const boundaryExistsInCache = (msgs.data ?? []).some(
           (message: any) => message.id === separatorForEntry.firstMessageId,
         );
-        if (cachedBoundary) {
+        const boundaryIsVisible = allVisibleMessages.some(
+          (message: any) => message.id === separatorForEntry.firstMessageId,
+        );
+        if (boundaryExistsInCache && !boundaryIsVisible) {
+          // The stored boundary is no longer renderable (for example, it
+          // expired or was deleted), so there is no valid message to anchor to.
+          initialScrollDoneRef.current = true;
+          el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+          return;
+        }
+        if (boundaryIsVisible) {
           setVisibleMessageLimit((limit) => Math.max(limit, msgs.data?.length ?? limit));
           return;
         }
