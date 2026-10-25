@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Clock3, Sparkles } from "lucide-react";
+import { useMemo } from "react";
 
 /**
  * A purely local countdown. The target is midnight at the start of 23 Dec 2026
@@ -66,7 +67,7 @@ export function MysteryCountdown() {
     };
   }, []);
 
-  const time = getTimeLeft(now);
+  const time = useMemo(() => getTimeLeft(now), [now]);
   const complete = TARGET_TIME <= now;
 
   return (
