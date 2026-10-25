@@ -166,9 +166,9 @@ export const listMessages = createServerFn({ method: "POST" })
       hasMoreOlder,
       nextBeforeCreatedAt,
       nextBeforeId,
-      // Return the raw page cursor even when every row was expired and filtered out.
-      nextAfterCreatedAt: rawPageRows.at(-1)?.created_at ?? null,
-      nextAfterId: rawPageRows.at(-1)?.id ?? null,
+      // Return the last row actually included in this raw page, even when all were expired.
+      nextAfterCreatedAt: pageRows.at(-1)?.created_at ?? null,
+      nextAfterId: pageRows.at(-1)?.id ?? null,
     };
   });
 
