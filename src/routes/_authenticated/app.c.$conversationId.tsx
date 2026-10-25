@@ -499,7 +499,6 @@ function ChatPage() {
         // newest cached row. A device may have a newer cached message while
         // missing rows in the middle of the conversation.
         const cached = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
-        const cachedIds = new Set(cached.map((message: any) => message.id));
         const backfillStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
         let cursor = backfillStart;
         let cursorId: string | undefined;
@@ -527,7 +526,6 @@ function ChatPage() {
         }
 
         if (!cancelled) {
-          const newlyRecovered = backfilled.filter((message: any) => !cachedIds.has(message.id));
           const current = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? cached;
           const repaired = mergeMessages(current, backfilled);
 
@@ -545,9 +543,6 @@ function ChatPage() {
           }
 
           await writeCachedMessages(meId, conversationId, repaired).catch(() => {});
-          showNewMessagesSeparator(newlyRecovered.filter((message: any) =>
-            message.sender_id !== meId && message.message_type !== "system"
-          ));
         }
       } catch (error) {
         // Do not silently hide a failed catch-up: that made stale local cache
