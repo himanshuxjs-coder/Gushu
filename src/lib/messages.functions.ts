@@ -137,43 +137,24 @@ export const listMessages = createServerFn({ method: "POST" })
       messagesQuery = messagesQuery.or(`delete_after.is.null,delete_after.gt.${nowIso}`);
     }
 
-    const savedQuery = data.beforeCreatedAt || data.afterCreatedAt
-      ? Promise.resolve({ data: [] })
-      : supabase
-          .from("message_saves")
-          .select("message_id")
-          .eq("conversation_id", data.conversationId);
+    const { data: descRows, error: messageError } = await messagesQuery;
+    if (messageError) throw new Error(messageError.message);
 
-    const [savedResult, messageResult] = await Promise.all([savedQuery, messagesQuery]);
-    if (messageResult.error) throw new Error(messageResult.error.message);
-
-    const descRows = messageResult.data ?? [];
-    const hasMoreOlder = descRows.length > pageSize;
-    const rawPageRows = descRows.slice(0, pageSize);
-    // Incremental queries intentionally fetch by cursor only; discard expired
-    // rows after pagination so the cursor can still advance past them.
-    const pageRows = data.afterCreatedAt || data.beforeCreatedAt
-      ? rawPageRows.filter((row: any) => !row.delete_after || new Date(row.delete_after).getTime() > Date.now())
-      : rawPageRows;
-    const nextBeforeCreatedAt = rawPageRows.at(-1)?.created_at ?? null;
-    const savedIds = (savedResult.data ?? []).map((saved: any) => saved.message_id as string);
-
-    let savedRows: any[] = [];
-    if (savedIds.length > 0) {
-      const { data: rows } = await supabase
-        .from("messages")
-        .select("*, profiles!deleted_by_id(username, display_name)")
-        .in("id", savedIds)
-        .order("created_at", { ascending: false });
-      savedRows = rows ?? [];
-    }
-
-    const byId = new Map<string, any>();
-    for (const row of pageRows) byId.set(row.id, row);
-    for (const row of savedRows) byId.set(row.id, row);
-    const merged = Array.from(byId.values()).sort(
-      (left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
-    );
+    const rawPageRows = descRows ?? [];
+    const hasMoreOlder = rawPageRows.length > pageSize;
+    const pageRows = rawPageRows.slice(0, pageSize);
+    // Apply expiry filtering after paging so the raw cursor can always advance.
+    // Do not inject saved messages from outside this page: that breaks the
+    // chronological page boundary and makes the UI skip intervening messages.
+    const visiblePageRows = data.afterCreatedAt || data.beforeCreatedAt
+      ? pageRows.filter((row: any) => !row.delete_after || new Date(row.delete_after).getTime() > Date.now())
+      : pageRows;
+    const nextBeforeCreatedAt = pageRows.at(-1)?.created_at ?? null;
+    const nextBeforeId = pageRows.at(-1)?.id ?? null;
+    const merged = [...visiblePageRows].sort((left, right) => {
+      const timeDiff = new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+      return timeDiff || String(left.id).localeCompare(String(right.id));
+    });
     const enriched = await enrichMessages({
       supabase,
       userId,
@@ -184,7 +165,7 @@ export const listMessages = createServerFn({ method: "POST" })
       messages: enriched,
       hasMoreOlder,
       nextBeforeCreatedAt,
-      nextBeforeId: rawPageRows.at(-1)?.id ?? null,
+      nextBeforeId,
       // Return the raw page cursor even when every row was expired and filtered out.
       nextAfterCreatedAt: rawPageRows.at(-1)?.created_at ?? null,
       nextAfterId: rawPageRows.at(-1)?.id ?? null,
