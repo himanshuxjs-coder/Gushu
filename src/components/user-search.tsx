@@ -249,7 +249,7 @@ export function UserSearch() {
                 key={u.id}
                 aria-busy={openingUserId === u.id}
                 className={cn(
-                  "interactive-row flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-[background-color,box-shadow,transform] duration-200 group animate-in-fade",
+                  "interactive-row relative flex w-full items-center gap-3 overflow-hidden rounded-xl p-2.5 text-left transition-[background-color,box-shadow,transform] duration-200 group animate-in-fade",
                   openingUserId === u.id
                     ? "bg-primary/10 ring-1 ring-primary/30 shadow-sm scale-[0.99]"
                     : openingUserId
@@ -278,12 +278,14 @@ export function UserSearch() {
                       {u.display_name ?? u.username}
                     </span>
                     {u.verified && <VerifiedBadge size={12} />}
-                    {openingUserId === u.id && <Loader2 className="ml-1 size-3.5 shrink-0 animate-spin text-primary" aria-hidden="true" />}
                   </div>
-                  <div className="truncate text-[11px] text-muted-foreground transition-colors group-hover:text-primary">
-                    {openingUserId === u.id ? "Opening chat…" : `@${u.username}`}
-                  </div>
+                  <div className="truncate text-[11px] text-muted-foreground transition-colors group-hover:text-primary">@{u.username}</div>
                 </button>
+                {openingUserId === u.id && (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-primary/15" role="progressbar" aria-label="Opening selected user" aria-valuetext="Loading">
+                    <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+                  </div>
+                )}
               </div>
             ))}
           </div>
