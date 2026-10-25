@@ -1587,6 +1587,7 @@ function ChatPage() {
                   className="mt-1 rounded-full border border-border px-4 py-2 text-xs text-foreground transition-colors hover:bg-muted"
                 >
                   Retry loading
+                </button>
               </div>
             )}
             {(() => {
