@@ -169,35 +169,7 @@ function RootComponent() {
     return () => sub.subscription.unsubscribe();
   }, [router, queryClient]);
 
-  useEffect(() => {
-    const refreshAppOnResume = async () => {
-      if (document.visibilityState !== "visible") return;
 
-      void router.invalidate();
-      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      void queryClient.invalidateQueries({ queryKey: ["messages"] });
-      void queryClient.invalidateQueries({ queryKey: ["conv-settings"] });
-      void queryClient.invalidateQueries({ queryKey: ["me"] });
-      void queryClient.invalidateQueries({ type: "active" });
-
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: ["conversations"] }),
-        queryClient.refetchQueries({ queryKey: ["messages"] }),
-        queryClient.refetchQueries({ queryKey: ["conv-settings"] }),
-        queryClient.refetchQueries({ queryKey: ["me"] }),
-      ]);
-    };
-
-    document.addEventListener("visibilitychange", refreshAppOnResume);
-    window.addEventListener("focus", refreshAppOnResume);
-    window.addEventListener("online", refreshAppOnResume);
-
-    return () => {
-      document.removeEventListener("visibilitychange", refreshAppOnResume);
-      window.removeEventListener("focus", refreshAppOnResume);
-      window.removeEventListener("online", refreshAppOnResume);
-    };
-  }, [queryClient, router]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;

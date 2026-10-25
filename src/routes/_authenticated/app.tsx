@@ -92,7 +92,10 @@ function AppShell() {
   });
 
   const me = meQuery.data;
-  const meId = me?.id;
+  const routeContext = Route.useRouteContext();
+  // The authenticated parent already has the session user, so do not wait for
+  // the profile query before starting the inbox request.
+  const meId = me?.id ?? routeContext.user?.id;
   const location = useLocation();
   const params = useParams({ strict: false }) as { conversationId?: string };
   const hasActiveConversation = !!params.conversationId;
@@ -164,7 +167,7 @@ function AppShell() {
         throw error;
       }
     },
-    enabled: meQuery.isSuccess && !!me,
+    enabled: !!meId,
     retry: 2,
     staleTime: 60000,
     gcTime: 30 * 60_000,
