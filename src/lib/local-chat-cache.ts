@@ -137,7 +137,9 @@ export async function readCachedMessages(
         messages.set(pending.id, pending.localMessage);
       }
       const result = Array.from(messages.values()).sort(
-        (left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
+        (left, right) =>
+          new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
+          || String(left.id).localeCompare(String(right.id)),
       );
       resolve(result.length ? result : cachedRecord ? [] : null);
     };
