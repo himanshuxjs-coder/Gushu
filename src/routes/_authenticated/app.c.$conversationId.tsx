@@ -1750,7 +1750,7 @@ function ChatPage() {
               type="button"
               onClick={animateScrollToBottom}
               className={cn(
-                "relative inline-flex h-11 items-center gap-2 rounded-full border border-white/20",
+                "group relative inline-flex h-11 items-center gap-2 rounded-full border border-white/20",
                 "bg-gradient-to-r from-primary to-primary/90 px-4 text-sm font-semibold text-primary-foreground",
                 "shadow-[0_8px_28px_rgba(0,0,0,0.22)] backdrop-blur-xl",
                 "transition-[transform,box-shadow,filter] duration-200 ease-out",
