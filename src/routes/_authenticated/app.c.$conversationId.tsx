@@ -455,6 +455,7 @@ function ChatPage() {
           queryClient.setQueryData(["messages-pagination", conversationId], {
             hasMoreOlder: cached.length >= MESSAGE_PAGE_SIZE,
             beforeCreatedAt: cached[0]?.created_at ?? null,
+            beforeId: cached[0]?.id ?? null,
           });
           return cached;
         }
