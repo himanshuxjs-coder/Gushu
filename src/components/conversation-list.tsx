@@ -101,7 +101,7 @@ export const ConversationList = memo(function ConversationList({
       queryClient.setQueryData(
         ["conv-settings", conversationId],
         (current: any) => current ?? {
-          is_hidden: !!item.hidden,
+          is_hidden: !!item.hidden || !!item.hasSecretCode,
           is_locked: !!item.locked,
           pin_hash: item.hasPin ? "device-locked" : null,
           secret_code_hash: item.hasSecretCode ? "device-locked" : null,
