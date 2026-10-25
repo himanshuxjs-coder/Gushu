@@ -1408,7 +1408,7 @@ function ChatPage() {
     if ((isNearBottom || shouldFollowNewMessage) && !userScrolledUpRef.current) {
       requestAnimationFrame(() => animateScrollToBottom());
     }
-  }, [activeNewMessagesSeparator?.firstMessageId, animateScrollToBottom, conversationId, meId, refreshingOnEntry, visibleMessages, msgs.data]);
+  }, [activeNewMessagesSeparator?.firstMessageId, animateScrollToBottom, conversationId, getMsg, meId, queryClient, refreshingOnEntry, visibleMessages, msgs.data]);
 
   // If a separator is added or updated after the initial scroll, keep the oldest
   // missed message visible. During entry catch-up, wait so we don't jump to the
