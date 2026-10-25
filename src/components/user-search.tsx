@@ -74,12 +74,17 @@ export function UserSearch() {
     const cached = searchCacheRef.current.get(term);
     const cacheIsFresh = !!cached && Date.now() - cached.savedAt < 30_000;
     if (cacheIsFresh) {
+      // Show cached matches immediately while keeping the UI responsive.
       setResults(cached.results);
       setLoading(false);
+    } else {
+      // Don't leave results from the previous query visible as if they match
+      // the text currently in the input.
+      setResults([]);
+      setLoading(true);
     }
 
     const timer = setTimeout(async () => {
-      if (!cacheIsFresh) setLoading(true);
       setCodeMatch(null);
 
       const searchPromise = cacheIsFresh
@@ -110,7 +115,7 @@ export function UserSearch() {
       }
 
       setLoading(false);
-    }, 180);
+    }, 120);
 
     return () => clearTimeout(timer);
   }, [q, search, findHidden]);
