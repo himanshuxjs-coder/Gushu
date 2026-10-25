@@ -32,6 +32,7 @@ export const Route = createFileRoute("/_authenticated/app")({
 function AppShell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user: routeUser } = Route.useRouteContext();
   const listFn = useServerFn(listMyConversations);
   const isAdminFn = useServerFn(amIAdmin);
   const getIncognitoFn = useServerFn(getIncognito);
@@ -150,21 +151,24 @@ function AppShell() {
   const conversations = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
+      // Paint the last inbox immediately from IndexedDB while the server refresh
+      // runs in parallel with profile loading. The authenticated route already
+      // resolved the session, so this does not need to wait for the profile query.
+      const cached = await readCachedConversations(routeUser.id).catch(() => null);
+      if (cached) {
+        queryClient.setQueryData(["conversations"], (current: any) =>
+          Array.isArray(current) && current.length ? current : cached,
+        );
+        if (!navigator.onLine) return cached;
+      }
       try {
-        if (!navigator.onLine && meId) {
-          const cached = await readCachedConversations(meId);
-          if (cached) return cached;
-        }
         return await listFn({ data: undefined as any });
       } catch (error) {
-        if (meId) {
-          const cached = await readCachedConversations(meId);
-          if (cached) return cached;
-        }
+        if (cached) return cached;
         throw error;
       }
     },
-    enabled: meQuery.isSuccess && !!me,
+    enabled: !!routeUser?.id,
     retry: 2,
     staleTime: 60000,
     gcTime: 30 * 60_000,
@@ -210,9 +214,9 @@ function AppShell() {
   }, [queryClient]);
 
   useEffect(() => {
-    if (!meId) return;
+    if (!routeUser?.id) return;
     let cancelled = false;
-    void readCachedConversations(meId)
+    void readCachedConversations(routeUser.id)
       .then((cached) => {
         if (cancelled || !cached) return;
         queryClient.setQueryData(["conversations"], (current: any) =>
@@ -224,12 +228,12 @@ function AppShell() {
     return () => {
       cancelled = true;
     };
-  }, [meId, queryClient]);
+  }, [routeUser?.id, queryClient]);
 
   useEffect(() => {
-    if (!meId || !Array.isArray(conversations.data)) return;
-    void writeCachedConversations(meId, conversations.data).catch(() => {});
-  }, [conversations.data, meId]);
+    if (!routeUser?.id || !Array.isArray(conversations.data)) return;
+    void writeCachedConversations(routeUser.id, conversations.data).catch(() => {});
+  }, [conversations.data, routeUser?.id]);
 
   const conversationList = useMemo(() => conversations.data ?? [], [conversations.data]);
 
