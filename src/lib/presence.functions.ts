@@ -24,7 +24,7 @@ export const markPresenceInactive = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { error } = await context.supabase
       .from("profiles")
-      .update({ last_seen_at: null })
+      .update({ last_seen_at: new Date().toISOString() })
       .eq("id", context.userId);
     if (error) throw new Error(error.message);
     return { ok: true };
