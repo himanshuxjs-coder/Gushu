@@ -111,34 +111,6 @@ function ChatPage() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [refreshingOnEntry, setRefreshingOnEntry] = useState(true);
   const [showWeakConnection, setShowWeakConnection] = useState(false);
-  // Only show the weak-connection message if the initial loading spinner lasts
-  // longer than four seconds. Fast loads keep the UI clean and quiet.
-  useEffect(() => {
-    const isWaitingForInitialMessages =
-      !settingsQuery?.isError &&
-      settingsQuery?.isSuccess &&
-      !isLocked &&
-      !isHiddenLocked &&
-      !msgs.data?.length &&
-      (msgs.isLoading || refreshingOnEntry);
-
-    if (!isWaitingForInitialMessages) {
-      setShowWeakConnection(false);
-      return;
-    }
-
-    const timer = window.setTimeout(() => setShowWeakConnection(true), 4000);
-    return () => window.clearTimeout(timer);
-  }, [
-    settingsQuery?.isError,
-    settingsQuery?.isSuccess,
-    isLocked,
-    isHiddenLocked,
-    msgs.data?.length,
-    msgs.isLoading,
-    refreshingOnEntry,
-  ]);
-
   const [newMessagesSeparator, setNewMessagesSeparator] = useState<{ firstMessageId: string; count: number } | null>(null);
   const newMessagesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Share one incremental catch-up between chat entry and Realtime subscription recovery.
@@ -1539,6 +1511,35 @@ function ChatPage() {
     setShowSecretPrompt(false);
     void queryClient.invalidateQueries({ queryKey: ["messages", conversationId], exact: true });
   }
+
+
+  // Only show the weak-connection message if the initial loading spinner lasts
+  // longer than four seconds. Fast loads keep the UI clean and quiet.
+  useEffect(() => {
+    const isWaitingForInitialMessages =
+      !settingsQuery?.isError &&
+      settingsQuery?.isSuccess &&
+      !isLocked &&
+      !isHiddenLocked &&
+      !msgs.data?.length &&
+      (msgs.isLoading || refreshingOnEntry);
+
+    if (!isWaitingForInitialMessages) {
+      setShowWeakConnection(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => setShowWeakConnection(true), 4000);
+    return () => window.clearTimeout(timer);
+  }, [
+    settingsQuery?.isError,
+    settingsQuery?.isSuccess,
+    isLocked,
+    isHiddenLocked,
+    msgs.data?.length,
+    msgs.isLoading,
+    refreshingOnEntry,
+  ]);
 
   const theme = settings?.theme ?? "obsidian";
   const wallpaper = settings?.wallpaper_url ?? "none";
