@@ -110,6 +110,7 @@ function ChatPage() {
   const [visibleMessageLimit, setVisibleMessageLimit] = useState(MESSAGE_PAGE_SIZE);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [refreshingOnEntry, setRefreshingOnEntry] = useState(true);
+  const [showWeakConnection, setShowWeakConnection] = useState(false);
   const [newMessagesSeparator, setNewMessagesSeparator] = useState<{ firstMessageId: string; count: number } | null>(null);
   const newMessagesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Share one incremental catch-up between chat entry and Realtime subscription recovery.
@@ -1511,6 +1512,35 @@ function ChatPage() {
     void queryClient.invalidateQueries({ queryKey: ["messages", conversationId], exact: true });
   }
 
+
+  // Only show the weak-connection message if the initial loading spinner lasts
+  // longer than four seconds. Fast loads keep the UI clean and quiet.
+  useEffect(() => {
+    const isWaitingForInitialMessages =
+      !settingsQuery?.isError &&
+      settingsQuery?.isSuccess &&
+      !isLocked &&
+      !isHiddenLocked &&
+      !msgs.data?.length &&
+      (msgs.isLoading || refreshingOnEntry);
+
+    if (!isWaitingForInitialMessages) {
+      setShowWeakConnection(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => setShowWeakConnection(true), 4000);
+    return () => window.clearTimeout(timer);
+  }, [
+    settingsQuery?.isError,
+    settingsQuery?.isSuccess,
+    isLocked,
+    isHiddenLocked,
+    msgs.data?.length,
+    msgs.isLoading,
+    refreshingOnEntry,
+  ]);
+
   const theme = settings?.theme ?? "obsidian";
   const wallpaper = settings?.wallpaper_url ?? "none";
   const wallpaperClass = WALLPAPER_STYLE[wallpaper] ?? "";
@@ -1597,10 +1627,12 @@ function ChatPage() {
                 <div className="grid size-12 place-items-center rounded-full border border-primary/20 bg-primary/10 text-primary">
                   <Loader2 className="size-5 animate-spin" />
                 </div>
-                <div className="space-y-1.5">
-                  <p className="text-sm font-medium text-foreground">Oops, you have a weak connection</p>
-                  <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">We’re still loading your conversation. Keep this screen open; your messages will appear as soon as they’re ready.</p>
-                </div>
+                {showWeakConnection && (
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium text-foreground">Oops, you have a weak connection</p>
+                    <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">We’re still loading your conversation. Keep this screen open; your messages will appear as soon as they’re ready.</p>
+                  </div>
+                )}
               </div>
             )}
             {msgs.isError && (
