@@ -4,7 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/logo";
 
 export const Route = createFileRoute("/")({
-  ssr: false,
+  // Server-render the lightweight startup screen so the Gushu logo and
+  // loading line are visible before the client JavaScript finishes loading.
   component: Index,
 });
 
