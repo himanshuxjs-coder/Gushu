@@ -7,7 +7,31 @@ export const searchUsers = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ q: z.string().trim().min(1).max(40) }).parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const term = data.q.toLowerCase().replace(/[^a-z0-9_]/g, "");
+    const displayTerm = data.q.trim().replace(/\s+/g, " ");
+    const usernameTerm = displayTerm.toLowerCase().replace(/[^a-z0-9_]/g, "");
+    if (!displayTerm || (!usernameTerm && !displayTerm)) return [];
+
+    // Search usernames and display names independently so a match in either
+    // field is not lost, and merge/deduplicate the results before ranking.
+    const [hiddenResult, usernameResult, displayNameResult] = await Promise.all([
+      supabase
+        .from("conversation_settings")
+        .select("conversation_id")
+        .eq("user_id", userId)
+        .eq("is_hidden", true)
+        .not("secret_code_hash", "is", null),
+      usernameTerm
+        ? supabase
+            .from("profiles")
+            .select("id, username, display_name, avatar_url, verified")
+            .ilike("username", `%${usernameTerm}%`)
+            .neq("id", userId)
+            .limit(25)
+        : Promise.resolve({ data: [], error: null }),
+      supabase
+        .from("profiles")
+        .select("id, username, display_name, avatar_url, verified")
+        .ilike("display_name", `%${displayTerm.replace(/[%_\\\\]/g, "\\    const term = data.q.toLowerCase().replace(/[^a-z0-9_]/g, "");
     if (!term) return [];
     
     const [{ data: hiddenSettings }, { data: profiles, error: searchError }] = await Promise.all([
@@ -40,7 +64,51 @@ export const searchUsers = createServerFn({ method: "POST" })
     }
 
     const excluded = new Set(excludeUserIds);
-    return (profiles ?? []).filter((profile) => !excluded.has(profile.id)).slice(0, 10);
+    return (profiles ?? []).filter((profile) => !excluded.has(profile.id)).slice(0, 10);")}%`)
+        .neq("id", userId)
+        .limit(25),
+    ]);
+
+    if (usernameResult.error) throw new Error(usernameResult.error.message);
+    if (displayNameResult.error) throw new Error(displayNameResult.error.message);
+
+    const profilesById = new Map<string, NonNullable<typeof usernameResult.data>[number]>();
+    for (const profile of [...(usernameResult.data ?? []), ...(displayNameResult.data ?? [])]) {
+      if (profile) profilesById.set(profile.id, profile);
+    }
+
+    const hiddenSettings = hiddenResult.data;
+    let excludeUserIds: string[] = [];
+    if (hiddenSettings && hiddenSettings.length > 0) {
+      const convIds = hiddenSettings.map(s => s.conversation_id);
+      const { data: convs, error: conversationsError } = await supabase
+        .from("conversations")
+        .select("user1_id, user2_id")
+        .in("id", convIds);
+      if (conversationsError) throw new Error(conversationsError.message);
+
+      if (convs) {
+        excludeUserIds = convs.map(c => c.user1_id === userId ? c.user2_id : c.user1_id);
+      }
+    }
+
+    const excluded = new Set(excludeUserIds);
+    const normalizedQuery = displayTerm.toLowerCase();
+    return [...profilesById.values()]
+      .filter((profile) => !excluded.has(profile.id))
+      .sort((a, b) => {
+        const aUsername = a.username.toLowerCase();
+        const bUsername = b.username.toLowerCase();
+        const aName = (a.display_name ?? "").toLowerCase();
+        const bName = (b.display_name ?? "").toLowerCase();
+        const score = (username: string, name: string) =>
+          username === normalizedQuery ? 0 :
+          username.startsWith(normalizedQuery.replace(/[^a-z0-9_]/g, "")) ? 1 :
+          name === normalizedQuery ? 2 :
+          name.startsWith(normalizedQuery) ? 3 : 4;
+        return score(aUsername, aName) - score(bUsername, bName);
+      })
+      .slice(0, 10);
   });
 
 export const getProfileByUsername = createServerFn({ method: "POST" })
