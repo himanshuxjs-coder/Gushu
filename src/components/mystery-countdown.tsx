@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { Sparkles } from "lucide-react";
+import { Clock3, Sparkles } from "lucide-react";
 
 /**
  * A purely local countdown to midnight at the start of 23 Dec 2026
@@ -119,6 +119,7 @@ function GiftBox({ color, index }: { color: string; index: number }) {
 
 export function MysteryCountdown() {
   const [now, setNow] = useState(() => Date.now());
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -159,7 +160,7 @@ export function MysteryCountdown() {
 
   return (
     <section className="mystery-countdown" aria-label="Birthday countdown">
-      <div className="mystery-countdown-heading-row">
+      <button className="mystery-countdown-toggle" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
         <span className="mystery-countdown-orbit" aria-hidden="true">
           <span className="mystery-countdown-orbit-core" />
         </span>
@@ -167,7 +168,8 @@ export function MysteryCountdown() {
           <span className="mystery-countdown-eyebrow"><Sparkles size={10} /> A LITTLE SOMETHING</span>
           <span className="mystery-countdown-title">{complete ? "The special day is here" : "Counting down to your day"}</span>
         </span>
-      </div>
+        <span className="mystery-countdown-chevron" aria-hidden="true">{expanded ? "−" : "+"}</span>
+      </button>
 
       <div className="mystery-countdown-clock" role="timer" aria-live="off">
         <DigitCell value={String(time.days)} label="Days" />
@@ -183,6 +185,15 @@ export function MysteryCountdown() {
         {palette.map((color, index) => <GiftBox key={index} color={color} index={index} />)}
       </div>
       <p className="birthday-daily-message" aria-live="polite">{message}</p>
+      <div className="mystery-countdown-foot">
+        <span><span className="mystery-countdown-live-dot" /> LOCAL TIME • ALWAYS TICKING</span>
+        <Clock3 size={11} aria-hidden="true" />
+      </div>
+      <div className="mystery-countdown-details" hidden={!expanded}>
+        <span>23 DEC</span>
+        <span className="mystery-countdown-detail-rule" />
+        <span>00:00 • MIDNIGHT</span>
+      </div>
     </section>
   );
 }
