@@ -122,7 +122,7 @@ export const listMessages = createServerFn({ method: "POST" })
       // Keyset pagination uses both timestamp and ID so messages sharing the
       // same created_at value are never skipped between pages.
       const cursorFilter = data.beforeId
-        ? `or(created_at.lt.${data.beforeCreatedAt},and(created_at.eq.${data.beforeCreatedAt},id.lt.${data.beforeId}))`
+        ? `created_at.lt.${data.beforeCreatedAt},and(created_at.eq.${data.beforeCreatedAt},id.lt.${data.beforeId})`
         : `created_at.lt.${data.beforeCreatedAt}`;
       messagesQuery = messagesQuery.or(cursorFilter);
     } else if (data.afterCreatedAt) {
@@ -130,7 +130,7 @@ export const listMessages = createServerFn({ method: "POST" })
       // Expiry is filtered in memory below; nesting the expiry OR inside the
       // cursor OR can produce a query the API rejects.
       const cursorFilter = data.afterId
-        ? `or(created_at.gt.${data.afterCreatedAt},and(created_at.eq.${data.afterCreatedAt},id.gt.${data.afterId}))`
+        ? `created_at.gt.${data.afterCreatedAt},and(created_at.eq.${data.afterCreatedAt},id.gt.${data.afterId})`
         : `created_at.gt.${data.afterCreatedAt}`;
       messagesQuery = messagesQuery.or(cursorFilter);
     } else {
