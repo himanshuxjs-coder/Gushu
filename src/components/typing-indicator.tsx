@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -66,4 +67,25 @@ export function DraftBubble({ text }: { text: string }) {
       </div>
     </div>
   );
+}
+
+
+/**
+ * Isolated live draft preview. Draft keystrokes update only this small component,
+ * rather than setting state in ChatPage and rerendering the full message history.
+ */
+export function LiveDraftBubble() {
+  const [text, setText] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleDraft = (event: Event) => {
+      const next = (event as CustomEvent<string | null>).detail;
+      setText(next || null);
+    };
+    window.addEventListener("gushu:live-draft", handleDraft);
+    return () => window.removeEventListener("gushu:live-draft", handleDraft);
+  }, []);
+
+  if (!text) return null;
+  return <DraftBubble text={text} />;
 }
