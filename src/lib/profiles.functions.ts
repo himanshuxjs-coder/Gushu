@@ -43,6 +43,47 @@ export const searchUsers = createServerFn({ method: "POST" })
     return (profiles ?? []).filter((profile) => !excluded.has(profile.id)).slice(0, 10);
   });
 
+// Preload a small, privacy-filtered username directory so typeahead can respond locally.
+// The regular search endpoint remains the source of truth for users outside this first page.
+export const getSearchDirectory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const [{ data: hiddenSettings, error: hiddenError }, { data: profiles, error: profilesError }] = await Promise.all([
+      supabase
+        .from("conversation_settings")
+        .select("conversation_id")
+        .eq("user_id", userId)
+        .eq("is_hidden", true)
+        .not("secret_code_hash", "is", null),
+      supabase
+        .from("profiles")
+        .select("id, username, display_name, avatar_url, verified")
+        .neq("id", userId)
+        .not("username", "is", null)
+        .order("username", { ascending: true })
+        .limit(1000),
+    ]);
+    if (hiddenError) throw new Error(hiddenError.message);
+    if (profilesError) throw new Error(profilesError.message);
+
+    const hiddenConversationIds = (hiddenSettings ?? []).map((setting) => setting.conversation_id);
+    if (hiddenConversationIds.length === 0) return profiles ?? [];
+
+    const { data: conversations, error: conversationsError } = await supabase
+      .from("conversations")
+      .select("user1_id, user2_id")
+      .in("id", hiddenConversationIds);
+    if (conversationsError) throw new Error(conversationsError.message);
+
+    const excludedIds = new Set(
+      (conversations ?? []).map((conversation) =>
+        conversation.user1_id === userId ? conversation.user2_id : conversation.user1_id,
+      ),
+    );
+    return (profiles ?? []).filter((profile) => !excludedIds.has(profile.id));
+  });
+
 export const getProfileByUsername = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: unknown) =>
