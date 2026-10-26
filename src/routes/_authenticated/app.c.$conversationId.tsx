@@ -107,6 +107,7 @@ function ChatPage() {
   const previousMessageCountRef = useRef(0);
   const loadingOlderRef = useRef(false);
   const preserveScrollRef = useRef<{ height: number; top: number } | null>(null);
+  const historyBackfilledRef = useRef(false);
   const [visibleMessageLimit, setVisibleMessageLimit] = useState(MESSAGE_PAGE_SIZE);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [refreshingOnEntry, setRefreshingOnEntry] = useState(true);
@@ -258,8 +259,9 @@ function ChatPage() {
           const cached = await readCachedMessages(meId, conversationId);
           if (cached) {
             queryClient.setQueryData(["messages-pagination", conversationId], {
-              hasMoreOlder: cached.length >= MESSAGE_PAGE_SIZE,
+              hasMoreOlder: cached.length > 0,
               beforeCreatedAt: cached[0]?.created_at ?? null,
+              beforeId: cached[0]?.id ?? null,
             });
             return cached;
           }
@@ -295,6 +297,7 @@ function ChatPage() {
           queryClient.setQueryData(["messages-pagination", conversationId], {
             hasMoreOlder: page.hasMoreOlder,
             beforeCreatedAt: page.nextBeforeCreatedAt,
+            beforeId: page.nextBeforeId,
           });
         }
         await writeCachedMessages(meId, conversationId, merged).catch(() => {});
@@ -304,8 +307,9 @@ function ChatPage() {
         const cached = await readCachedMessages(meId, conversationId);
         if (cached) {
           queryClient.setQueryData(["messages-pagination", conversationId], {
-            hasMoreOlder: cached.length >= MESSAGE_PAGE_SIZE,
+            hasMoreOlder: cached.length > 0,
             beforeCreatedAt: cached[0]?.created_at ?? null,
+            beforeId: cached[0]?.id ?? null,
           });
           return cached;
         }
@@ -351,6 +355,7 @@ function ChatPage() {
             queryClient.setQueryData(["messages-pagination", conversationId], {
               hasMoreOlder: page.hasMoreOlder,
               beforeCreatedAt: page.nextBeforeCreatedAt,
+              beforeId: page.nextBeforeId,
             });
             await writeCachedMessages(meId, conversationId, loaded).catch(() => {});
             const unreadIncoming = loaded.filter((message: any) =>
@@ -468,7 +473,11 @@ function ChatPage() {
 
   const pagination = useQuery({
     queryKey: ["messages-pagination", conversationId],
-    queryFn: async () => ({ hasMoreOlder: false, beforeCreatedAt: null as string | null }),
+    queryFn: async () => ({
+      hasMoreOlder: false,
+      beforeCreatedAt: null as string | null,
+      beforeId: null as string | null,
+    }),
     enabled: false,
   });
 
@@ -530,6 +539,48 @@ function ChatPage() {
     preserveScrollRef.current = { height: element.scrollHeight, top: element.scrollTop };
 
     try {
+      // Local caches can contain the newest and oldest messages but miss rows
+      // in between. On the first request, reconcile the last 30 days from the
+      // server in stable chronological batches before revealing another page.
+      if (!historyBackfilledRef.current && navigator.onLine) {
+        const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        let cursor: string | undefined = cutoff;
+        let cursorId: string | undefined;
+        const backfilled: any[] = [];
+
+        while (cursor) {
+          const page = await listMsgs({
+            data: {
+              conversationId,
+              afterCreatedAt: cursor,
+              ...(cursorId ? { afterId: cursorId } : {}),
+              limit: MESSAGE_PAGE_SIZE,
+            },
+          });
+          backfilled.push(...page.messages);
+          if (page.hasMoreOlder && page.nextAfterCreatedAt && page.nextAfterId) {
+            cursor = page.nextAfterCreatedAt;
+            cursorId = page.nextAfterId;
+          } else {
+            cursor = undefined;
+          }
+        }
+
+        const latestCurrent = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
+        const reconciled = mergeMessages(latestCurrent, backfilled);
+        queryClient.setQueryData(["messages", conversationId], reconciled);
+        await writeCachedMessages(meId, conversationId, reconciled).catch(() => {});
+        const earliest = reconciled[0];
+        queryClient.setQueryData(["messages-pagination", conversationId], {
+          // The next older-page request will confirm whether anything predates
+          // this cursor. This is deliberately optimistic to recover stale caches.
+          hasMoreOlder: Boolean(earliest),
+          beforeCreatedAt: earliest?.created_at ?? null,
+          beforeId: earliest?.id ?? null,
+        });
+        historyBackfilledRef.current = true;
+      }
+
       const current = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
       if (visibleMessageLimit < current.length) {
         setVisibleMessageLimit((limit) => limit + MESSAGE_PAGE_SIZE);
@@ -537,6 +588,7 @@ function ChatPage() {
       }
 
       const beforeCreatedAt = pagination.data?.beforeCreatedAt ?? current[0]?.created_at;
+      const beforeId = pagination.data?.beforeId ?? current[0]?.id;
       if (!beforeCreatedAt || !pagination.data?.hasMoreOlder) {
         preserveScrollRef.current = null;
         return;
@@ -546,6 +598,7 @@ function ChatPage() {
         data: {
           conversationId,
           beforeCreatedAt,
+          ...(beforeId ? { beforeId } : {}),
           limit: MESSAGE_PAGE_SIZE,
         },
       });
@@ -553,9 +606,15 @@ function ChatPage() {
       if (page.messages.length === 0) {
         preserveScrollRef.current = null;
         queryClient.setQueryData(["messages-pagination", conversationId], {
-          hasMoreOlder: false,
-          beforeCreatedAt: null,
+          hasMoreOlder: page.hasMoreOlder,
+          beforeCreatedAt: page.nextBeforeCreatedAt,
+          beforeId: page.nextBeforeId,
         });
+        if (page.hasMoreOlder && page.nextBeforeCreatedAt && page.nextBeforeId) {
+          // A page may contain only expired/filtered rows; advance the cursor and
+          // let the next click continue rather than declaring history complete.
+          return;
+        }
         return;
       }
 
@@ -565,21 +624,24 @@ function ChatPage() {
       queryClient.setQueryData(["messages-pagination", conversationId], {
         hasMoreOlder: page.hasMoreOlder,
         beforeCreatedAt: page.nextBeforeCreatedAt,
+        beforeId: page.nextBeforeId,
       });
       setVisibleMessageLimit((limit) => limit + MESSAGE_PAGE_SIZE);
-    } catch {
+    } catch (error) {
       preserveScrollRef.current = null;
-      toast.error("Could not load earlier messages");
+      console.error("[Gushu] Could not reconcile chat history", error);
+      toast.error("Could not load messages. Please try again.");
     } finally {
       loadingOlderRef.current = false;
       setLoadingOlder(false);
     }
-  }, [conversationId, listMsgs, pagination.data, queryClient, visibleMessageLimit]);
+  }, [conversationId, historyBackfilledRef, listMsgs, meId, pagination.data, queryClient, visibleMessageLimit]);
 
   useEffect(() => {
     setVisibleMessageLimit(MESSAGE_PAGE_SIZE);
     loadingOlderRef.current = false;
     preserveScrollRef.current = null;
+    historyBackfilledRef.current = false;
     initialScrollDoneRef.current = false;
   }, [conversationId]);
 
