@@ -736,6 +736,10 @@ export function Composer({
         cancelAnimationFrame(resizeFrameRef.current);
         resizeFrameRef.current = null;
       }
+      if (draftStateTimeoutRef.current) {
+        clearTimeout(draftStateTimeoutRef.current);
+        draftStateTimeoutRef.current = null;
+      }
     };
   }, []);
 
