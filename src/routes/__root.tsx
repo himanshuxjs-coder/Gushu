@@ -121,6 +121,33 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <style>{`
+          #gushu-boot-splash {
+            position: fixed; inset: 0; z-index: 99999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 22px; background: #0b0b13; color: #f4f2ff;
+          }
+          html.gushu-app-ready #gushu-boot-splash {
+            opacity: 0; visibility: hidden; pointer-events: none;
+            transition: opacity 120ms ease, visibility 120ms ease;
+          }
+          #gushu-boot-progress {
+            width: 128px; height: 2px; overflow: hidden; border-radius: 999px;
+            background: rgba(255,255,255,.12);
+          }
+          #gushu-boot-progress::after {
+            content: ""; display: block; width: 45%; height: 100%; border-radius: inherit;
+            background: linear-gradient(135deg, #a855f7, #3b82f6);
+            animation: gushu-boot-progress 1.25s ease-in-out infinite;
+          }
+          @keyframes gushu-boot-progress {
+            from { transform: translateX(-110%); }
+            to { transform: translateX(290%); }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            #gushu-boot-progress::after { animation: none; }
+          }
+        `}</style>
         <script
           dangerouslySetInnerHTML={{
             __html: `try{var t=localStorage.getItem('gushu-theme');var d=t==='dark'||(!t&&true);if(d)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');}catch(e){}`,
@@ -150,6 +177,12 @@ function RootShell({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="bg-textured min-h-screen">
+        <div id="gushu-boot-splash" role="status" aria-label="Loading Gushu">
+          <img src={logoUrl} alt="" width="80" height="80" fetchPriority="high" decoding="sync"
+            style={{ display: "block", width: 80, height: 80, objectFit: "contain" }} />
+          <span style={{ fontFamily: "Georgia, serif", fontSize: 28, letterSpacing: "-0.04em" }}>Gushu</span>
+          <div id="gushu-boot-progress" aria-hidden="true" />
+        </div>
         {children}
         <Scripts />
       </body>
@@ -160,6 +193,10 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+
+  useEffect(() => {
+    document.documentElement.classList.add("gushu-app-ready");
+  }, []);
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
