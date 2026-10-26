@@ -132,8 +132,11 @@ export const listMessages = createServerFn({ method: "POST" })
       // Expiry is filtered in memory below; nesting the expiry OR inside the
       // cursor OR can produce a query the API rejects.
       const cursorFilter = data.afterId
-        ? `or(created_at.gt.${data.afterCreatedAt},and(created_at.eq.${data.afterCreatedAt},id.gt.${data.afterId}))`
+        ? `created_at.gt.${data.afterCreatedAt},and(created_at.eq.${data.afterCreatedAt},id.gt.${data.afterId})`
         : `created_at.gt.${data.afterCreatedAt}`;
+      // Supabase .or() accepts the comma-separated filter expression directly.
+      // Wrapping this string in another or(...) produces an invalid PostgREST filter
+      // and breaks multi-page history backfills as soon as the second batch is requested.
       messagesQuery = messagesQuery.or(cursorFilter);
     } else {
       messagesQuery = messagesQuery.or(`delete_after.is.null,delete_after.gt.${nowIso}`);
