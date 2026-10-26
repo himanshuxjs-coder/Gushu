@@ -539,6 +539,7 @@ function ChatPage() {
     preserveScrollRef.current = { height: element.scrollHeight, top: element.scrollTop };
 
     try {
+      let justBackfilledHistory = false;
       // Local caches can contain the newest and oldest messages but miss rows
       // in between. On the first request, reconcile the last 30 days from the
       // server in stable chronological batches before revealing another page.
@@ -579,6 +580,7 @@ function ChatPage() {
           beforeId: earliest?.id ?? null,
         });
         historyBackfilledRef.current = true;
+        justBackfilledHistory = true;
       }
 
       const current = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
@@ -589,7 +591,7 @@ function ChatPage() {
 
       const beforeCreatedAt = pagination.data?.beforeCreatedAt ?? current[0]?.created_at;
       const beforeId = pagination.data?.beforeId ?? current[0]?.id;
-      if (!beforeCreatedAt || !pagination.data?.hasMoreOlder) {
+      if (!beforeCreatedAt || (!pagination.data?.hasMoreOlder && !justBackfilledHistory)) {
         preserveScrollRef.current = null;
         return;
       }
