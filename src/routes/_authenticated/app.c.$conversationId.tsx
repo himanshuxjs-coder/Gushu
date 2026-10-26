@@ -1091,46 +1091,52 @@ function ChatPage() {
     const el = scrollRef.current;
     if (!el) return;
 
+    // A second tap continues from the current position instead of stacking
+    // another animation. Keep a single RAF loop in control of the viewport.
     cancelScrollAnimation();
-
-    // Reset user scroll intent
     userScrolledUpRef.current = false;
 
     const start = el.scrollTop;
-    const target = Math.max(el.scrollHeight - el.clientHeight, 0);
-    const distance = target - start;
+    const initialTarget = Math.max(el.scrollHeight - el.clientHeight, 0);
+    const distance = initialTarget - start;
 
-    if (Math.abs(distance) < 4) {
-      el.scrollTo({ top: target, behavior: "auto" });
+    if (Math.abs(distance) < 3) {
+      el.scrollTop = initialTarget;
       setShowJumpToLatestButton(false);
+      setUnreadBelowScroll(0);
       return;
     }
 
     isAnimatingScrollRef.current = true;
-
-    const duration = Math.min(320, Math.max(160, Math.abs(distance) * 0.3));
+    // A little more time on long chats makes the movement feel deliberate
+    // without making short jumps feel sluggish.
+    const duration = Math.min(560, Math.max(280, Math.abs(distance) * 0.22));
     const startTime = performance.now();
-    const ease = (t: number) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t);
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
     const step = (now: number) => {
-      if (!scrollRef.current) {
+      const viewport = scrollRef.current;
+      if (!viewport) {
         cancelScrollAnimation();
         return;
       }
 
-      const elapsed = now - startTime;
-      const progress = Math.min(1, elapsed / duration);
-      const eased = ease(progress);
-      const currentTarget = Math.max(scrollRef.current.scrollHeight - scrollRef.current.clientHeight, 0);
-      scrollRef.current.scrollTop = start + (currentTarget - start) * eased;
+      const progress = Math.min(1, (now - startTime) / duration);
+      const eased = easeOutCubic(progress);
+      const liveTarget = Math.max(viewport.scrollHeight - viewport.clientHeight, 0);
+      viewport.scrollTop = start + (liveTarget - start) * eased;
 
       if (progress < 1) {
         scrollAnimationFrameRef.current = requestAnimationFrame(step);
-      } else {
-        scrollRef.current.scrollTop = currentTarget;
-        cancelScrollAnimation();
-        setShowJumpToLatestButton(false);
+        return;
       }
+
+      // Re-read the bottom at completion so late layout changes never leave
+      // the user a little above the latest message.
+      viewport.scrollTop = Math.max(viewport.scrollHeight - viewport.clientHeight, 0);
+      cancelScrollAnimation();
+      setShowJumpToLatestButton(false);
+      setUnreadBelowScroll(0);
     };
 
     scrollAnimationFrameRef.current = requestAnimationFrame(step);
@@ -1674,48 +1680,46 @@ function ChatPage() {
             className="pointer-events-none absolute bottom-[5.75rem] right-4 z-20 sm:right-8"
           />
 
-          {/* Modern floating "Go to Latest" button */}
+          {/* Polished floating jump-to-latest control */}
           <div
             className={cn(
-              "absolute bottom-24 right-4 z-30 transition-all duration-300 ease-out",
+              "absolute bottom-24 right-4 z-30 will-change-transform",
+              "transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               showJumpToLatestButton
-                ? "opacity-100 scale-100 translate-y-0"
-                : "opacity-0 scale-75 translate-y-4 pointer-events-none",
+                ? "translate-y-0 scale-100 opacity-100"
+                : "pointer-events-none translate-y-3 scale-95 opacity-0",
             )}
+            aria-hidden={!showJumpToLatestButton}
           >
             <button
               type="button"
               onClick={animateScrollToBottom}
+              tabIndex={showJumpToLatestButton ? 0 : -1}
               className={cn(
-                "relative flex items-center justify-center",
-                "size-12 rounded-full",
-                // Modern glassmorphism
-                "bg-gradient-to-br from-primary/90 via-primary to-primary/90",
-                "backdrop-blur-xl",
-                // Border and shadow
-                "border-2 border-white/20",
-                "shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.1)_inset]",
-                // Hover effects
-                "hover:scale-110 hover:shadow-[0_12px_40px_rgba(139,92,246,0.4)]",
-                // Active
-                "active:scale-95",
-                // Transition
-                "transition-all duration-200 ease-out",
+                "group relative inline-flex h-11 items-center justify-center gap-2 overflow-hidden rounded-full",
+                "border border-white/15 bg-background/85 px-3.5 text-foreground",
+                "shadow-[0_8px_28px_rgba(0,0,0,0.22),0_1px_0_rgba(255,255,255,0.12)_inset]",
+                "backdrop-blur-2xl supports-[backdrop-filter]:bg-background/70",
+                "transition-[transform,border-color,box-shadow,background-color] duration-200",
+                "hover:-translate-y-0.5 hover:border-primary/40 hover:bg-background/95",
+                "hover:shadow-[0_12px_32px_rgba(0,0,0,0.28),0_0_22px_rgba(139,92,246,0.16)]",
+                "active:translate-y-0 active:scale-[0.97]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                "motion-reduce:transition-none",
               )}
-              aria-label={`Jump to latest${unreadBelowScroll > 0 ? ` (${unreadBelowScroll} unread)` : ""}`}
+              aria-label={`Go to latest message${unreadBelowScroll > 0 ? `; ${unreadBelowScroll} unread messages` : ""}`}
+              title="Go to latest message"
             >
-              <ArrowDown className="size-5 text-white" />
-
-              {/* Unread badge */}
+              <span className="relative grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm transition-transform duration-200 group-hover:translate-y-0.5 motion-reduce:transition-none">
+                <ArrowDown className="size-4" strokeWidth={2.5} />
+              </span>
+              <span className="hidden text-sm font-semibold tracking-tight sm:inline">Latest</span>
               {unreadBelowScroll > 0 && (
                 <span
                   className={cn(
-                    "absolute -top-1 -right-1 flex items-center justify-center",
-                    "min-w-5 h-5 px-1",
-                    "bg-gradient-to-br from-red-500 to-red-600",
-                    "text-white text-[10px] font-bold rounded-full",
-                    "shadow-[0_2px_8px_rgba(239,68,68,0.5)]",
-                    "animate-pulse",
+                    "flex h-5 min-w-5 items-center justify-center rounded-full px-1.5",
+                    "bg-rose-500 text-[10px] font-bold leading-none text-white",
+                    "shadow-[0_2px_8px_rgba(244,63,94,0.28)]",
                   )}
                 >
                   {unreadBelowScroll > 99 ? "99+" : unreadBelowScroll}
