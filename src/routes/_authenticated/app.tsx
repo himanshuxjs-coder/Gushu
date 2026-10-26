@@ -15,6 +15,7 @@ import { ProfileView } from "@/components/profile-view";
 import { Button } from "@/components/ui/button";
 import { listMyConversations } from "@/lib/conversations.functions";
 import { getIncognito } from "@/lib/privacy.functions";
+import { getSearchDirectory } from "@/lib/profiles.functions";
 import { amIAdmin } from "@/lib/admin.functions";
 import { initializeGlobalNotifications, setActiveConversationId, unregisterPushNotifications } from "@/lib/notification-service";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ function AppShell() {
   const listFn = useServerFn(listMyConversations);
   const isAdminFn = useServerFn(amIAdmin);
   const getIncognitoFn = useServerFn(getIncognito);
+  const searchDirectoryFn = useServerFn(getSearchDirectory);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const profileChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const notifCleanupRef = useRef<(() => void) | null>(null);
@@ -150,16 +152,35 @@ function AppShell() {
   const conversations = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
+      // On a cold launch, paint the last inbox immediately from IndexedDB and
+      // reconcile it in the background. Once React Query has data, normal
+      // invalidations fetch fresh server data directly.
+      if (meId && queryClient.getQueryData(["conversations"]) === undefined) {
+        const cached = await readCachedConversations(meId).catch(() => null);
+        if (cached !== null) {
+          if (navigator.onLine) {
+            window.setTimeout(() => {
+              void queryClient.invalidateQueries({
+                queryKey: ["conversations"],
+                exact: true,
+                refetchType: "active",
+              });
+            }, 50);
+          }
+          return cached;
+        }
+      }
+
       try {
         if (!navigator.onLine && meId) {
           const cached = await readCachedConversations(meId);
-          if (cached) return cached;
+          if (cached !== null) return cached;
         }
         return await listFn({ data: undefined as any });
       } catch (error) {
         if (meId) {
           const cached = await readCachedConversations(meId);
-          if (cached) return cached;
+          if (cached !== null) return cached;
         }
         throw error;
       }
@@ -216,7 +237,7 @@ function AppShell() {
       .then((cached) => {
         if (cancelled || !cached) return;
         queryClient.setQueryData(["conversations"], (current: any) =>
-          Array.isArray(current) && current.length ? current : cached,
+          Array.isArray(current) ? current : cached,
         );
       })
       .catch(() => {});
@@ -230,6 +251,18 @@ function AppShell() {
     if (!meId || !Array.isArray(conversations.data)) return;
     void writeCachedConversations(meId, conversations.data).catch(() => {});
   }, [conversations.data, meId]);
+
+  // Load searchable usernames alongside the inbox. Results are filtered locally while typing,
+  // with the authenticated server search retained as a fallback for the full user base.
+  const searchDirectory = useQuery({
+    queryKey: ["search-directory", meId],
+    queryFn: () => searchDirectoryFn({ data: undefined as any }),
+    enabled: !!meId,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
 
   const conversationList = useMemo(() => conversations.data ?? [], [conversations.data]);
 
@@ -456,7 +489,7 @@ function AppShell() {
               </Button>
             </div>
           </div>
-          <UserSearch />
+          <UserSearch directory={searchDirectory.data ?? null} />
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden no-scrollbar">

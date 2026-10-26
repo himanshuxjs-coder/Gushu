@@ -10,6 +10,8 @@ export function Logo({ size = 32, className }: { size?: number; className?: stri
       height={size}
       className={cn("select-none object-contain", className)}
       draggable={false}
+      decoding="async"
+      fetchPriority={size >= 80 ? "high" : "auto"}
       style={{ imageRendering: "auto" }}
     />
   );
