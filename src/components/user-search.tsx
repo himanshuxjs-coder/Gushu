@@ -32,6 +32,8 @@ export function UserSearch({ directory }: { directory: R[] | null }) {
   const [secretCodePrompt, setSecretCodePrompt] = useState<{ user: R; conversationId: string } | null>(null);
   const [secretCodeInput, setSecretCodeInput] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [openingUserId, setOpeningUserId] = useState<string | null>(null);
+  const openingUserRef = useRef<string | null>(null);
   const search = useServerFn(searchUsers);
   const create = useServerFn(getOrCreateConversation);
   const checkAccess = useServerFn(checkConversationAccess);
@@ -141,14 +143,17 @@ export function UserSearch({ directory }: { directory: R[] | null }) {
   }, []);
 
   async function start(user: R) {
+    // Lock immediately so a double click cannot create duplicate navigation requests.
+    if (openingUserRef.current) return;
+    openingUserRef.current = user.id;
+    setOpeningUserId(user.id);
     try {
       const { id } = await create({ data: { otherUserId: user.id } });
 
-      // Check if this conversation requires a secret code
+      // Keep the selected result and its progress line visible while access is checked.
       const access = await checkAccess({ data: { conversationId: id } });
 
       if (access.requiresSecretCode) {
-        // Block access - require secret code
         setSecretCodePrompt({ user, conversationId: id });
         setOpen(false);
         return;
@@ -156,9 +161,12 @@ export function UserSearch({ directory }: { directory: R[] | null }) {
 
       setQ("");
       setOpen(false);
-      navigate({ to: "/app/c/$conversationId", params: { conversationId: id } });
+      await navigate({ to: "/app/c/$conversationId", params: { conversationId: id } });
     } catch (e: any) {
       toast.error(e?.message ?? "Could not start chat");
+    } finally {
+      openingUserRef.current = null;
+      setOpeningUserId(null);
     }
   }
 
@@ -197,6 +205,15 @@ export function UserSearch({ directory }: { directory: R[] | null }) {
 
   return (
     <>
+      <style>{`
+        @keyframes search-chat-progress {
+          0% { transform: translateX(-110%); }
+          100% { transform: translateX(260%); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .search-chat-progress-motion { animation: none !important; }
+        }
+      `}</style>
       <div ref={ref} className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -253,32 +270,47 @@ export function UserSearch({ directory }: { directory: R[] | null }) {
             {results.map((u, idx) => (
               <div
                 key={u.id}
+                role="button"
+                tabIndex={openingUserId ? -1 : 0}
+                aria-disabled={!!openingUserId}
+                aria-label={`Open chat with ${u.display_name ?? u.username}`}
+                onClick={() => void start(u)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    void start(u);
+                  }
+                }}
                 className={cn(
-                  "interactive-row flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-muted/70 group animate-in-fade",
+                  "interactive-row group relative flex w-full cursor-pointer items-center gap-3 overflow-hidden rounded-xl p-2.5 text-left animate-in-fade transition-[background-color,transform,box-shadow] duration-200 ease-out hover:bg-muted/70 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                   idx < 5 && `stagger-${idx + 1}`,
+                  openingUserId === u.id && "bg-primary/10 shadow-sm scale-[0.995]",
+                  openingUserId && openingUserId !== u.id && "pointer-events-none opacity-55",
                 )}
               >
                 <button
                   type="button"
-                  className="shrink-0 rounded-full transition-transform duration-200 hover:scale-[1.04] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                  onClick={() => openProfile(u)}
+                  className="relative z-10 shrink-0 rounded-full transition-transform duration-200 hover:scale-[1.04] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                  onClick={(event) => { event.stopPropagation(); openProfile(u); }}
                   aria-label={`View ${u.display_name ?? u.username}'s profile`}
                 >
                   <Avatar name={u.display_name ?? u.username} url={u.avatar_url} size={32} />
                 </button>
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  onClick={() => void start(u)}
-                >
+                <div className="min-w-0 flex-1 px-1 py-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-medium">
                       {u.display_name ?? u.username}
                     </span>
                     {u.verified && <VerifiedBadge size={12} />}
                   </div>
-                  <div className="truncate text-[11px] text-muted-foreground group-hover:text-primary transition-colors">@{u.username}</div>
-                </button>
+                  <div className="truncate text-[11px] text-muted-foreground transition-colors group-hover:text-primary">@{u.username}</div>
+                </div>
+                {openingUserId === u.id && (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] overflow-hidden bg-primary/15" aria-label="Opening chat" role="progressbar">
+                    <div className="h-full w-2/5 rounded-full bg-gradient-to-r from-primary/60 via-primary to-primary/60 animate-[search-chat-progress_1.05s_ease-in-out_infinite]" />
+                  </div>
+                )}
               </div>
             ))}
           </div>
