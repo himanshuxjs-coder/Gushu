@@ -22,7 +22,7 @@ type R = {
   verified: boolean;
 };
 
-export function UserSearch() {
+export function UserSearch({ directory }: { directory: R[] | null }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<R[]>([]);
   const [loading, setLoading] = useState(false);
@@ -58,35 +58,50 @@ export function UserSearch() {
   }, []);
 
   useEffect(() => {
-    const term = q.trim();
+    const rawTerm = q.trim();
+    const term = rawTerm.toLowerCase().replace(/[^a-z0-9_]/g, "");
     const requestId = ++requestIdRef.current;
 
     setCodeMatch(null);
     setSearchError(false);
-    if (!term) {
+    if (!rawTerm) {
       setResults([]);
       setLoading(false);
       return;
     }
 
-    // Keep recent username results in memory so revisiting a query feels instant.
+    // Render matches from the preloaded directory immediately on every keystroke.
+    // Server search still runs below to cover users beyond the preloaded page.
+    const localMatches = term && directory
+      ? directory.filter((user) => user.username.toLowerCase().includes(term)).slice(0, 10)
+      : [];
+    if (directory) {
+      setResults(localMatches);
+      setLoading(localMatches.length === 0);
+    } else {
+      setResults([]);
+      setLoading(true);
+    }
+
+    // Keep recent server results in memory so revisiting a query stays instant.
     // Secret-code matches are deliberately never cached.
-    const cached = searchCacheRef.current.get(term);
+    const cached = searchCacheRef.current.get(rawTerm);
     const cacheIsFresh = !!cached && Date.now() - cached.savedAt < 30_000;
     if (cacheIsFresh) {
-      setResults(cached.results);
+      setResults((current) => {
+        const merged = [...current, ...cached!.results];
+        return Array.from(new Map(merged.map((user) => [user.id, user])).values()).slice(0, 10);
+      });
       setLoading(false);
     }
 
     const timer = setTimeout(async () => {
-      if (!cacheIsFresh) setLoading(true);
-      setCodeMatch(null);
-
+      if (!cacheIsFresh && localMatches.length === 0) setLoading(true);
       const searchPromise = cacheIsFresh
         ? Promise.resolve(cached!.results)
-        : search({ data: { q: term } });
-      const hiddenPromise = term.length >= 4
-        ? findHidden({ data: { code: term } }).catch(() => null)
+        : search({ data: { q: rawTerm } });
+      const hiddenPromise = rawTerm.length >= 4
+        ? findHidden({ data: { code: rawTerm } }).catch(() => null)
         : Promise.resolve(null);
 
       const [searchResult, hidden] = await Promise.allSettled([searchPromise, hiddenPromise]);
@@ -95,13 +110,15 @@ export function UserSearch() {
       if (searchResult.status === "fulfilled") {
         const found = searchResult.value;
         setSearchError(false);
-        setResults(found);
-        searchCacheRef.current.set(term, { results: found, savedAt: Date.now() });
+        const merged = [...found, ...localMatches];
+        const unique = Array.from(new Map(merged.map((user) => [user.id, user])).values()).slice(0, 10);
+        setResults(unique);
+        searchCacheRef.current.set(rawTerm, { results: found, savedAt: Date.now() });
         if (searchCacheRef.current.size > 20) {
           const oldestKey = searchCacheRef.current.keys().next().value;
           if (oldestKey) searchCacheRef.current.delete(oldestKey);
         }
-      } else {
+      } else if (localMatches.length === 0) {
         setSearchError(true);
       }
 
@@ -110,10 +127,10 @@ export function UserSearch() {
       }
 
       setLoading(false);
-    }, 180);
+    }, 160);
 
     return () => clearTimeout(timer);
-  }, [q, search, findHidden]);
+  }, [q, search, findHidden, directory]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
