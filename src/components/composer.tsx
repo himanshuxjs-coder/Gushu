@@ -357,30 +357,21 @@ export function Composer({
   // stays local and responsive instead of sending a Realtime event per keystroke.
   const broadcastDraft = useCallback(
     (currentText: string) => {
-      if (!draftPreviewEnabled || !draftChannelRef.current) return;
+      const channel = draftChannelRef.current;
+      if (!draftPreviewEnabled || !channel) return;
 
-      if (draftDebounceRef.current) {
-        clearTimeout(draftDebounceRef.current);
-        draftDebounceRef.current = null;
-      }
+      // Keep remote draft previews character-by-character. Sending is asynchronous;
+      // do not delay the preview behind a debounce timer or block the input handler.
+      if (currentText === lastDraftTextRef.current) return;
 
-      draftDebounceRef.current = setTimeout(() => {
-        draftDebounceRef.current = null;
-        if (!draftChannelRef.current) return;
+      const hasText = currentText.length > 0;
+      const event = hasText ? "draft" : "draft-clear";
+      const payload = hasText
+        ? { userId: meId, text: currentText }
+        : { userId: meId };
 
-        const trimmed = currentText.trim();
-        if (trimmed === lastDraftTextRef.current) return;
-
-        const channel = draftChannelRef.current;
-        const event = trimmed ? "draft" : "draft-clear";
-        const payload = trimmed
-          ? { userId: meId, text: trimmed }
-          : { userId: meId };
-
-        // Mark only when the broadcast is actually queued, not on each keystroke.
-        lastDraftTextRef.current = trimmed;
-        channel.send({ type: "broadcast", event, payload }).catch(() => {});
-      }, 140);
+      lastDraftTextRef.current = currentText;
+      void channel.send({ type: "broadcast", event, payload }).catch(() => {});
     },
     [draftPreviewEnabled, meId],
   );
