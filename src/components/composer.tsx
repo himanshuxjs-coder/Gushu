@@ -91,7 +91,6 @@ export function Composer({
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentRef = useRef<number>(0);
   const draftChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const draftDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentTextRef = useRef<string>("");
   const lastDraftTextRef = useRef<string>("");
@@ -297,10 +296,6 @@ export function Composer({
         supabase.removeChannel(draftChannelRef.current);
         draftChannelRef.current = null;
       }
-      if (draftDebounceRef.current) {
-        clearTimeout(draftDebounceRef.current);
-        draftDebounceRef.current = null;
-      }
     };
   }, [conversationId, draftPreviewEnabled, meId]);
 
@@ -353,34 +348,25 @@ export function Composer({
     [conversationId, setTypingStatus, clearTypingStatus, meId],
   );
 
-  // Draft previews are best-effort: debounce network broadcasts so typing
-  // stays local and responsive instead of sending a Realtime event per keystroke.
+  // Draft previews are best-effort and broadcast immediately for live character-by-character
+  // updates. Realtime sends are asynchronous and do not wait on the network in the input handler.
   const broadcastDraft = useCallback(
     (currentText: string) => {
-      if (!draftPreviewEnabled || !draftChannelRef.current) return;
+      const channel = draftChannelRef.current;
+      if (!draftPreviewEnabled || !channel) return;
 
-      if (draftDebounceRef.current) {
-        clearTimeout(draftDebounceRef.current);
-        draftDebounceRef.current = null;
-      }
+      // Keep remote draft previews character-by-character. Sending is asynchronous;
+      // do not delay the preview behind a debounce timer or block the input handler.
+      if (currentText === lastDraftTextRef.current) return;
 
-      draftDebounceRef.current = setTimeout(() => {
-        draftDebounceRef.current = null;
-        if (!draftChannelRef.current) return;
+      const hasText = currentText.length > 0;
+      const event = hasText ? "draft" : "draft-clear";
+      const payload = hasText
+        ? { userId: meId, text: currentText }
+        : { userId: meId };
 
-        const trimmed = currentText.trim();
-        if (trimmed === lastDraftTextRef.current) return;
-
-        const channel = draftChannelRef.current;
-        const event = trimmed ? "draft" : "draft-clear";
-        const payload = trimmed
-          ? { userId: meId, text: trimmed }
-          : { userId: meId };
-
-        // Mark only when the broadcast is actually queued, not on each keystroke.
-        lastDraftTextRef.current = trimmed;
-        channel.send({ type: "broadcast", event, payload }).catch(() => {});
-      }, 140);
+      lastDraftTextRef.current = currentText;
+      void channel.send({ type: "broadcast", event, payload }).catch(() => {});
     },
     [draftPreviewEnabled, meId],
   );
@@ -388,10 +374,6 @@ export function Composer({
   // Clear draft broadcast when message is sent
   const clearDraftBroadcast = useCallback(() => {
     if (!draftChannelRef.current) return;
-    if (draftDebounceRef.current) {
-      clearTimeout(draftDebounceRef.current);
-      draftDebounceRef.current = null;
-    }
     lastDraftTextRef.current = "";
     draftChannelRef.current
       .send({
