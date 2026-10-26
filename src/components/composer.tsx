@@ -91,7 +91,6 @@ export function Composer({
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentRef = useRef<number>(0);
   const draftChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const draftDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentTextRef = useRef<string>("");
   const lastDraftTextRef = useRef<string>("");
@@ -297,10 +296,6 @@ export function Composer({
         supabase.removeChannel(draftChannelRef.current);
         draftChannelRef.current = null;
       }
-      if (draftDebounceRef.current) {
-        clearTimeout(draftDebounceRef.current);
-        draftDebounceRef.current = null;
-      }
     };
   }, [conversationId, draftPreviewEnabled, meId]);
 
@@ -379,10 +374,6 @@ export function Composer({
   // Clear draft broadcast when message is sent
   const clearDraftBroadcast = useCallback(() => {
     if (!draftChannelRef.current) return;
-    if (draftDebounceRef.current) {
-      clearTimeout(draftDebounceRef.current);
-      draftDebounceRef.current = null;
-    }
     lastDraftTextRef.current = "";
     draftChannelRef.current
       .send({
