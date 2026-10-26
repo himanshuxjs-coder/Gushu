@@ -8,7 +8,7 @@ import { getMessage, listMessages, markConversationSeenIfVisible, markRead } fro
 import { getConversationSettings, verifyConversationSecretCode } from "@/lib/conversation-settings.functions";
 import { ChatHeader } from "@/components/chat-header";
 import { MessageBubble } from "@/components/message-bubble";
-import { DraftBubble, TypingBubble } from "@/components/typing-indicator";
+import { LiveDraftBubble, TypingBubble } from "@/components/typing-indicator";
 import { Composer } from "@/components/composer";
 import { PinDialog } from "@/components/pin-dialog";
 import { SecretCodeDialog } from "@/components/secret-code-dialog";
@@ -119,7 +119,6 @@ function ChatPage() {
   const lastScrollTopRef = useRef(0);
   const isNearBottomRef = useRef(true);
   const [isTyping, setIsTyping] = useState(false);
-  const [otherUserDraft, setOtherUserDraft] = useState<string | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [replyTarget, setReplyTarget] = useState<any | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -1926,9 +1925,9 @@ function ChatPage() {
                 );
               });
             })()}
-            {otherUserDraft && draftPreviewEnabled && (
+            {draftPreviewEnabled && (
               <div className="relative z-10">
-                <DraftBubble text={otherUserDraft} />
+                <LiveDraftBubble />
               </div>
             )}
             {msgs.data && msgs.data.length === 0 && !msgs.isLoading && (
@@ -2009,7 +2008,9 @@ function ChatPage() {
                 }
               }
             }}
-            onDraftChange={(text) => setOtherUserDraft(text)}
+            onDraftChange={(text) => {
+              window.dispatchEvent(new CustomEvent("gushu:live-draft", { detail: text }));
+            }}
           />
         </>
       )}
