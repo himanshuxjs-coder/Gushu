@@ -99,6 +99,7 @@ export const listMessages = createServerFn({ method: "POST" })
     z.object({
       conversationId: z.string().uuid(),
       beforeCreatedAt: z.string().datetime().optional(),
+      beforeId: z.string().uuid().optional(),
       afterCreatedAt: z.string().datetime().optional(),
       afterId: z.string().uuid().optional(),
       limit: z.number().int().min(1).max(100).optional(),
@@ -118,9 +119,14 @@ export const listMessages = createServerFn({ method: "POST" })
       .limit(pageSize + 1);
 
     if (data.beforeCreatedAt) {
-      messagesQuery = messagesQuery
-        .or(`delete_after.is.null,delete_after.gt.${nowIso}`)
-        .lt("created_at", data.beforeCreatedAt);
+      // Use a stable (created_at, id) cursor so messages sharing a timestamp
+      // are not skipped between pages. Expiry is filtered after pagination so
+      // the cursor can still advance across expired rows.
+      messagesQuery = messagesQuery.or(
+        data.beforeId
+          ? `created_at.lt.${data.beforeCreatedAt},and(created_at.eq.${data.beforeCreatedAt},id.lt.${data.beforeId})`
+          : `created_at.lt.${data.beforeCreatedAt}`,
+      );
     } else if (data.afterCreatedAt) {
       // Keep the incremental cursor as the only PostgREST OR expression.
       // Expiry is filtered in memory below; nesting the expiry OR inside the
@@ -148,7 +154,7 @@ export const listMessages = createServerFn({ method: "POST" })
     const rawPageRows = descRows.slice(0, pageSize);
     // Incremental queries intentionally fetch by cursor only; discard expired
     // rows after pagination so the cursor can still advance past them.
-    const pageRows = data.afterCreatedAt
+    const pageRows = data.afterCreatedAt || data.beforeCreatedAt
       ? rawPageRows.filter((row: any) => !row.delete_after || new Date(row.delete_after).getTime() > Date.now())
       : rawPageRows;
     const nextBeforeCreatedAt = rawPageRows.at(-1)?.created_at ?? null;
@@ -180,6 +186,7 @@ export const listMessages = createServerFn({ method: "POST" })
       messages: enriched,
       hasMoreOlder,
       nextBeforeCreatedAt,
+      nextBeforeId: rawPageRows.at(-1)?.id ?? null,
       // Return the raw page cursor even when every row was expired and filtered out.
       nextAfterCreatedAt: rawPageRows.at(-1)?.created_at ?? null,
       nextAfterId: rawPageRows.at(-1)?.id ?? null,
