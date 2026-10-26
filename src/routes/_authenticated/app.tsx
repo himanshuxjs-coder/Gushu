@@ -15,6 +15,7 @@ import { ProfileView } from "@/components/profile-view";
 import { Button } from "@/components/ui/button";
 import { listMyConversations } from "@/lib/conversations.functions";
 import { getIncognito } from "@/lib/privacy.functions";
+import { getSearchDirectory } from "@/lib/profiles.functions";
 import { amIAdmin } from "@/lib/admin.functions";
 import { initializeGlobalNotifications, setActiveConversationId, unregisterPushNotifications } from "@/lib/notification-service";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ function AppShell() {
   const listFn = useServerFn(listMyConversations);
   const isAdminFn = useServerFn(amIAdmin);
   const getIncognitoFn = useServerFn(getIncognito);
+  const searchDirectoryFn = useServerFn(getSearchDirectory);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const profileChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const notifCleanupRef = useRef<(() => void) | null>(null);
@@ -230,6 +232,18 @@ function AppShell() {
     if (!meId || !Array.isArray(conversations.data)) return;
     void writeCachedConversations(meId, conversations.data).catch(() => {});
   }, [conversations.data, meId]);
+
+  // Load searchable usernames alongside the inbox. Results are filtered locally while typing,
+  // with the authenticated server search retained as a fallback for the full user base.
+  const searchDirectory = useQuery({
+    queryKey: ["search-directory", meId],
+    queryFn: () => searchDirectoryFn({ data: undefined as any }),
+    enabled: !!meId,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
 
   const conversationList = useMemo(() => conversations.data ?? [], [conversations.data]);
 
@@ -456,7 +470,7 @@ function AppShell() {
               </Button>
             </div>
           </div>
-          <UserSearch />
+          <UserSearch directory={searchDirectory.data ?? null} />
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden no-scrollbar">
