@@ -67,6 +67,8 @@ export function Composer({
   onDraftChange?: (text: string | null) => void;
 }) {
   const { text, setText, clear: clearDraft, loaded: draftLoaded } = useDraft(conversationId);
+  const [hasInputText, setHasInputText] = useState(false);
+  const hasInputTextRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [emoji, setEmoji] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -176,6 +178,8 @@ export function Composer({
         await createScheduled({ data: { conversationId, content: scheduleContent, scheduledFor } });
         if (textareaRef.current) textareaRef.current.value = "";
         currentTextRef.current = "";
+        hasInputTextRef.current = false;
+        setHasInputText(false);
         if (draftStateTimeoutRef.current) clearTimeout(draftStateTimeoutRef.current);
         setText("");
         clearDraftBroadcast();
@@ -507,6 +511,8 @@ export function Composer({
       const shortened = content.slice(0, MAX_MESSAGE_LENGTH);
       if (textareaRef.current) textareaRef.current.value = shortened;
       currentTextRef.current = shortened;
+      hasInputTextRef.current = Boolean(shortened.trim());
+      setHasInputText(hasInputTextRef.current);
       setText(shortened);
       return;
     }
@@ -561,6 +567,8 @@ export function Composer({
 
     if (textareaRef.current) textareaRef.current.value = "";
     currentTextRef.current = "";
+    hasInputTextRef.current = false;
+    setHasInputText(false);
     if (draftStateTimeoutRef.current) clearTimeout(draftStateTimeoutRef.current);
     clearDraft();
     clearDraftBroadcast();
@@ -694,6 +702,8 @@ export function Composer({
         toast.error(e?.message ?? "Send failed. Please try again.");
         if (textareaRef.current && !textareaRef.current.value) textareaRef.current.value = content;
         currentTextRef.current = textareaRef.current?.value ?? content;
+        hasInputTextRef.current = Boolean(currentTextRef.current.trim());
+        setHasInputText(hasInputTextRef.current);
         setText(content);
         queryClient.setQueryData(queryKey, (old: any) =>
           (old || []).map((msg: any) =>
@@ -748,6 +758,11 @@ export function Composer({
       const nextValue = value.length > MAX_MESSAGE_LENGTH ? value.slice(0, MAX_MESSAGE_LENGTH) : value;
       currentTextRef.current = nextValue;
       if (textareaRef.current && textareaRef.current.value !== nextValue) textareaRef.current.value = nextValue;
+      const nextHasText = Boolean(nextValue.trim());
+      if (nextHasText !== hasInputTextRef.current) {
+        hasInputTextRef.current = nextHasText;
+        setHasInputText(nextHasText);
+      }
 
       // Keep keystrokes in the DOM; avoid rerendering the large composer tree per character.
       if (draftStateTimeoutRef.current) clearTimeout(draftStateTimeoutRef.current);
@@ -772,6 +787,8 @@ export function Composer({
     if (!element.value && text) {
       element.value = text;
       currentTextRef.current = text;
+      hasInputTextRef.current = Boolean(text.trim());
+      setHasInputText(hasInputTextRef.current);
     }
     resizeComposerTextarea();
   }, [draftLoaded, text, resizeComposerTextarea]);
@@ -948,7 +965,7 @@ export function Composer({
 
         <EmojiPickerWrapper setText={insertEmoji} />
 
-        {!text.trim() && !busy && (
+        {!hasInputText && !busy && (
           <div className="flex items-center gap-1 sm:gap-2">
             <Button
               type="button"
@@ -973,7 +990,7 @@ export function Composer({
           </div>
         )}
 
-        {text.trim() && (
+        {hasInputText && (
           <Button
             type="button"
             onPointerDown={handleSendPointerDown}
@@ -991,7 +1008,7 @@ export function Composer({
               }
               void submit();
             }}
-            disabled={busy || !text.trim()}
+            disabled={busy || !hasInputText}
             className={cn("h-8 rounded-xl px-3 sm:h-10 sm:px-4 sm:gap-1.5")}
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
