@@ -541,10 +541,10 @@ function ChatPage() {
     try {
       let justBackfilledHistory = false;
       // Local caches can contain the newest and oldest messages but miss rows
-      // in between. On the first request, reconcile the last 30 days from the
+      // in between. On the first request, reconcile the last 5 days from the
       // server in stable chronological batches before revealing another page.
       if (!historyBackfilledRef.current && navigator.onLine) {
-        const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
         let cursor: string | undefined = cutoff;
         let cursorId: string | undefined;
         const backfilled: any[] = [];
