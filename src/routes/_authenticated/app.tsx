@@ -152,16 +152,35 @@ function AppShell() {
   const conversations = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
+      // On a cold launch, paint the last inbox immediately from IndexedDB and
+      // reconcile it in the background. Once React Query has data, normal
+      // invalidations fetch fresh server data directly.
+      if (meId && queryClient.getQueryData(["conversations"]) === undefined) {
+        const cached = await readCachedConversations(meId).catch(() => null);
+        if (cached !== null) {
+          if (navigator.onLine) {
+            window.setTimeout(() => {
+              void queryClient.invalidateQueries({
+                queryKey: ["conversations"],
+                exact: true,
+                refetchType: "active",
+              });
+            }, 50);
+          }
+          return cached;
+        }
+      }
+
       try {
         if (!navigator.onLine && meId) {
           const cached = await readCachedConversations(meId);
-          if (cached) return cached;
+          if (cached !== null) return cached;
         }
         return await listFn({ data: undefined as any });
       } catch (error) {
         if (meId) {
           const cached = await readCachedConversations(meId);
-          if (cached) return cached;
+          if (cached !== null) return cached;
         }
         throw error;
       }
@@ -218,7 +237,7 @@ function AppShell() {
       .then((cached) => {
         if (cancelled || !cached) return;
         queryClient.setQueryData(["conversations"], (current: any) =>
-          Array.isArray(current) && current.length ? current : cached,
+          Array.isArray(current) ? current : cached,
         );
       })
       .catch(() => {});
