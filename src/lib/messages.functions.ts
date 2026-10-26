@@ -98,9 +98,9 @@ export const listMessages = createServerFn({ method: "POST" })
   .validator((input: unknown) =>
     z.object({
       conversationId: z.string().uuid(),
-      beforeCreatedAt: z.string().datetime().optional(),
+      beforeCreatedAt: z.string().datetime({ offset: true }).optional(),
       beforeId: z.string().uuid().optional(),
-      afterCreatedAt: z.string().datetime().optional(),
+      afterCreatedAt: z.string().datetime({ offset: true }).optional(),
       afterId: z.string().uuid().optional(),
       limit: z.number().int().min(1).max(100).optional(),
     }).parse(input),
