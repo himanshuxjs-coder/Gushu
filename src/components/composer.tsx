@@ -90,6 +90,8 @@ export function Composer({
   const lastTypingSentRef = useRef<number>(0);
   const draftChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const draftDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentTextRef = useRef<string>("");
   const lastDraftTextRef = useRef<string>("");
   const onTypingChangeRef = useRef(onTypingChange);
   const onDraftChangeRef = useRef(onDraftChange);
@@ -149,13 +151,13 @@ export function Composer({
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }, []);
 
-  const openSchedule = useCallback((message = text, item: ScheduledMessage | null = null) => {
+  const openSchedule = useCallback((message = (textareaRef.current?.value ?? currentTextRef.current), item: ScheduledMessage | null = null) => {
     setEditingSchedule(item);
     setScheduleContent(item?.content ?? message);
     setScheduleTime(item ? formatScheduleTimeForInput(item.scheduled_for) : defaultScheduleTime());
     setScheduleOpen(true);
     setScheduleListOpen(true);
-  }, [defaultScheduleTime, formatScheduleTimeForInput, text]);
+  }, [defaultScheduleTime, formatScheduleTimeForInput]);
 
   const closeSchedule = useCallback(() => {
     setScheduleOpen(false);
@@ -172,6 +174,9 @@ export function Composer({
         toast.success("Scheduled message updated");
       } else {
         await createScheduled({ data: { conversationId, content: scheduleContent, scheduledFor } });
+        if (textareaRef.current) textareaRef.current.value = "";
+        currentTextRef.current = "";
+        if (draftStateTimeoutRef.current) clearTimeout(draftStateTimeoutRef.current);
         setText("");
         clearDraftBroadcast();
         toast.success("Message scheduled");
@@ -229,6 +234,7 @@ export function Composer({
   useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (draftStateTimeoutRef.current) clearTimeout(draftStateTimeoutRef.current);
       clearTypingStatus({ data: { conversationId } }).catch(() => {});
     };
   }, [conversationId, clearTypingStatus]);
@@ -490,14 +496,18 @@ export function Composer({
   }, []);
 
   async function submit() {
-    const content = text.trim();
+    // Read directly from the uncontrolled input so sending never waits for a React render.
+    const content = (textareaRef.current?.value ?? currentTextRef.current).trim();
     // Guard synchronously as well as through button state so rapid clicks,
     // Enter + click, or touch events cannot create duplicate messages.
     if (!content || busy || submittingRef.current > 0) return;
 
     if (content.length > MAX_MESSAGE_LENGTH) {
       toast.error("Message cannot exceed 4000 characters.");
-      setText(content.slice(0, MAX_MESSAGE_LENGTH));
+      const shortened = content.slice(0, MAX_MESSAGE_LENGTH);
+      if (textareaRef.current) textareaRef.current.value = shortened;
+      currentTextRef.current = shortened;
+      setText(shortened);
       return;
     }
 
@@ -549,6 +559,9 @@ export function Composer({
       created_at: createdAt,
     };
 
+    if (textareaRef.current) textareaRef.current.value = "";
+    currentTextRef.current = "";
+    if (draftStateTimeoutRef.current) clearTimeout(draftStateTimeoutRef.current);
     clearDraft();
     clearDraftBroadcast();
     queryClient.setQueryData(queryKey, (old: any) => [...(old || []), newMessage]);
@@ -679,7 +692,9 @@ export function Composer({
         );
       } else {
         toast.error(e?.message ?? "Send failed. Please try again.");
-        setText((current) => current || content);
+        if (textareaRef.current && !textareaRef.current.value) textareaRef.current.value = content;
+        currentTextRef.current = textareaRef.current?.value ?? content;
+        setText(content);
         queryClient.setQueryData(queryKey, (old: any) =>
           (old || []).map((msg: any) =>
             msg.id === optimisticId
@@ -727,27 +742,59 @@ export function Composer({
   const handleTextChange = useCallback(
     (value: string) => {
       const nextValue = value.length > MAX_MESSAGE_LENGTH ? value.slice(0, MAX_MESSAGE_LENGTH) : value;
+      currentTextRef.current = nextValue;
+      if (textareaRef.current && textareaRef.current.value !== nextValue) textareaRef.current.value = nextValue;
 
-      // Keep the input handler lightweight; textarea sizing is coalesced per frame.
-      setText(nextValue);
+      // Keep keystrokes in the DOM; avoid rerendering the large composer tree per character.
+      if (draftStateTimeoutRef.current) clearTimeout(draftStateTimeoutRef.current);
+      draftStateTimeoutRef.current = setTimeout(() => {
+        draftStateTimeoutRef.current = null;
+        setText(nextValue);
+      }, 250);
+
       handleTyping(nextValue);
       broadcastDraft(nextValue);
-      if (value.length > MAX_MESSAGE_LENGTH) {
-        toast.error("Message cannot exceed 4000 characters.");
-      }
+      resizeComposerTextarea();
+      if (value.length > MAX_MESSAGE_LENGTH) toast.error("Message cannot exceed 4000 characters.");
     },
-    [handleTyping, broadcastDraft, resizeComposerTextarea],
+    [handleTyping, broadcastDraft, resizeComposerTextarea, setText],
   );
 
-  // Also size restored drafts and text inserted from the emoji picker.
+  // Restore a saved draft after the asynchronous draft lookup completes.
   useEffect(() => {
+    if (!draftLoaded) return;
+    const element = textareaRef.current;
+    if (!element) return;
+    if (!element.value && text) {
+      element.value = text;
+      currentTextRef.current = text;
+    }
     resizeComposerTextarea();
-  }, [text, resizeComposerTextarea]);
+  }, [draftLoaded, text, resizeComposerTextarea]);
+
+  const insertEmoji = useCallback((emojiCharacter: string) => {
+    const element = textareaRef.current;
+    if (!element) {
+      handleTextChange(`${currentTextRef.current}${emojiCharacter}`);
+      return;
+    }
+    const start = element.selectionStart ?? element.value.length;
+    const end = element.selectionEnd ?? start;
+    const updated = `${element.value.slice(0, start)}${emojiCharacter}${element.value.slice(end)}`.slice(0, MAX_MESSAGE_LENGTH);
+    element.value = updated;
+    currentTextRef.current = updated;
+    handleTextChange(updated);
+    const cursor = Math.min(start + emojiCharacter.length, updated.length);
+    requestAnimationFrame(() => {
+      element.focus({ preventScroll: true });
+      element.setSelectionRange(cursor, cursor);
+    });
+  }, [handleTextChange]);
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key !== "Enter") return;
     if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
-    if (e.nativeEvent.isComposing || !text.trim()) return;
+    if (e.nativeEvent.isComposing || !(textareaRef.current?.value ?? currentTextRef.current).trim()) return;
 
     e.preventDefault();
     void submit();
@@ -873,7 +920,7 @@ export function Composer({
         />
         <Textarea
           ref={textareaRef}
-          value={text}
+          defaultValue={text}
           onChange={(e) => handleTextChange(e.target.value)}
           onInput={resizeComposerTextarea}
           onFocus={() => {
@@ -895,7 +942,7 @@ export function Composer({
           className="min-h-[40px] max-h-36 flex-1 resize-none overflow-y-hidden border-0 bg-transparent px-2 py-2.5 text-sm leading-5 focus-visible:ring-0 sm:py-2"
         />
 
-        <EmojiPickerWrapper setText={setText} />
+        <EmojiPickerWrapper setText={insertEmoji} />
 
         {!text.trim() && !busy && (
           <div className="flex items-center gap-1 sm:gap-2">
@@ -1004,12 +1051,12 @@ export function Composer({
   );
 }
 
-const EmojiPickerWrapper = memo(function EmojiPickerWrapper({ setText }: { setText: (t: string | ((prev: string) => string)) => void }) {
+const EmojiPickerWrapper = memo(function EmojiPickerWrapper({ setText }: { setText: (emoji: string) => void }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
 
   const onEmoji = (d: any) => {
-    setText((t) => t + d.emoji);
+    setText(d.emoji);
     if (!isMobile) setOpen(false);
   };
 
