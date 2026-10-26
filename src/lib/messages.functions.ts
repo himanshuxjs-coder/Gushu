@@ -120,14 +120,13 @@ export const listMessages = createServerFn({ method: "POST" })
 
     if (data.beforeCreatedAt) {
       // Use a stable (created_at, id) cursor so messages sharing a timestamp
-      // are not skipped between pages. Keep expiry filtering as a separate OR.
-      messagesQuery = messagesQuery
-        .or(`delete_after.is.null,delete_after.gt.${nowIso}`)
-        .or(
-          data.beforeId
-            ? `created_at.lt.${data.beforeCreatedAt},and(created_at.eq.${data.beforeCreatedAt},id.lt.${data.beforeId})`
-            : `created_at.lt.${data.beforeCreatedAt}`,
-        );
+      // are not skipped between pages. Expiry is filtered after pagination so
+      // the cursor can still advance across expired rows.
+      messagesQuery = messagesQuery.or(
+        data.beforeId
+          ? `created_at.lt.${data.beforeCreatedAt},and(created_at.eq.${data.beforeCreatedAt},id.lt.${data.beforeId})`
+          : `created_at.lt.${data.beforeCreatedAt}`,
+      );
     } else if (data.afterCreatedAt) {
       // Keep the incremental cursor as the only PostgREST OR expression.
       // Expiry is filtered in memory below; nesting the expiry OR inside the
@@ -155,7 +154,7 @@ export const listMessages = createServerFn({ method: "POST" })
     const rawPageRows = descRows.slice(0, pageSize);
     // Incremental queries intentionally fetch by cursor only; discard expired
     // rows after pagination so the cursor can still advance past them.
-    const pageRows = data.afterCreatedAt
+    const pageRows = data.afterCreatedAt || data.beforeCreatedAt
       ? rawPageRows.filter((row: any) => !row.delete_after || new Date(row.delete_after).getTime() > Date.now())
       : rawPageRows;
     const nextBeforeCreatedAt = rawPageRows.at(-1)?.created_at ?? null;
