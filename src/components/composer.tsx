@@ -348,8 +348,8 @@ export function Composer({
     [conversationId, setTypingStatus, clearTypingStatus, meId],
   );
 
-  // Draft previews are best-effort: debounce network broadcasts so typing
-  // stays local and responsive instead of sending a Realtime event per keystroke.
+  // Draft previews are best-effort and broadcast immediately for live character-by-character
+  // updates. Realtime sends are asynchronous and do not wait on the network in the input handler.
   const broadcastDraft = useCallback(
     (currentText: string) => {
       const channel = draftChannelRef.current;
