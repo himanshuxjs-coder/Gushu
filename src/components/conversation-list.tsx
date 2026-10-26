@@ -117,6 +117,7 @@ export const ConversationList = memo(function ConversationList({
           queryClient.setQueryData(["messages-pagination", conversationId], {
             hasMoreOlder: page.hasMoreOlder,
             beforeCreatedAt: page.nextBeforeCreatedAt,
+            beforeId: page.nextBeforeId,
           });
           return page.messages;
         },
