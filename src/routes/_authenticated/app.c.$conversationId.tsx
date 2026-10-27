@@ -1703,13 +1703,9 @@ function ChatPage() {
                     )}
                     <div
                       className={cn(
-                        "[content-visibility:auto] [contain-intrinsic-size:0_88px]",
-                        idx === visibleMessages.length - 1 && "animate-message-entry",
+                        "message-row [content-visibility:auto] [contain-intrinsic-size:0_88px]",
                       )}
-                      style={{
-                        contain: "layout paint style",
-                        animationDelay: `${Math.min(idx, 9) * 18}ms`,
-                      }}
+                      style={{ contain: "layout paint style" }}
                     >
                       <MessageBubble
                         m={m as any}
