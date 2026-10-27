@@ -780,9 +780,13 @@ function ChatPage() {
             }
           }
 
-          // Merge into cache — never replace the array
-          queryClient.setQueryData(["messages", conversationId], (old: any) => {
-            return mergeRealtimeMessage(old ?? [], msg);
+          // Apply the database INSERT to React Query immediately. Keep this
+          // callback synchronous and lightweight so React can paint the row on
+          // the next frame instead of waiting for any unrelated async work.
+          queryClient.setQueryData<any[]>(["messages", conversationId], (old) => {
+            const current = old ?? [];
+            if (current.some((item: any) => item.id === msg.id)) return current;
+            return mergeRealtimeMessage(current, msg);
           });
 
           // Update conversation list preview + unread
