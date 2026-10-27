@@ -1232,6 +1232,47 @@ function ChatPage() {
     }, 220);
   }, [animateScrollToBottom]);
 
+  // Animate only genuinely new rows. A CSS animation attached to the last row
+  // replays whenever that row changes (read receipts, reactions, or typing state),
+  // which looks like a stutter. Track newly observed message IDs instead.
+  const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  const [enteringMessageIds, setEnteringMessageIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    const currentMessages = visibleMessages.filter((message: any) => message.message_type !== "system");
+    const knownIds = knownMessageIdsRef.current;
+
+    // The first populated render is history, not a stream of new messages.
+    if (!initialMessagesLoadedRef.current && currentMessages.length > 0) {
+      currentMessages.forEach((message: any) => knownIds.add(message.id));
+      initialMessagesLoadedRef.current = true;
+      return;
+    }
+
+    const newIds = currentMessages
+      .filter((message: any) => !knownIds.has(message.id))
+      .map((message: any) => message.id);
+
+    currentMessages.forEach((message: any) => knownIds.add(message.id));
+    if (newIds.length === 0) return;
+
+    setEnteringMessageIds((previous) => {
+      const next = new Set(previous);
+      newIds.forEach((id: string) => next.add(id));
+      return next;
+    });
+
+    const timeout = window.setTimeout(() => {
+      setEnteringMessageIds((previous) => {
+        const next = new Set(previous);
+        newIds.forEach((id: string) => next.delete(id));
+        return next;
+      });
+    }, 220);
+
+    return () => window.clearTimeout(timeout);
+  }, [visibleMessages]);
+
   // Smart auto-scroll: on first load jump to first unread, afterwards only
   // auto-scroll if user is already near the bottom.
   useEffect(() => {
@@ -1704,6 +1745,7 @@ function ChatPage() {
                     <div
                       className={cn(
                         "message-row [content-visibility:auto] [contain-intrinsic-size:0_88px]",
+                        enteringMessageIds.has(m.id) && "animate-message-entry",
                       )}
                       style={{ contain: "layout paint style" }}
                     >
