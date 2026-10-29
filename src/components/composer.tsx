@@ -728,7 +728,13 @@ export function Composer({
   }, []);
 
   useEffect(() => {
-    if (!draftLoaded) return;
+    if (!draftLoaded) {
+      // Do not flash the previous conversation's draft while the next draft loads.
+      if (textareaRef.current) textareaRef.current.value = "";
+      hasTextRef.current = false;
+      setHasText(false);
+      return;
+    }
     // Draft restoration is the only time the uncontrolled textarea needs its
     // value synchronized from React state; ordinary keystrokes stay DOM-local.
     if (textareaRef.current) textareaRef.current.value = textRef.current;
