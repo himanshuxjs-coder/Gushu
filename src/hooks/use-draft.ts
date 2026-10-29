@@ -16,9 +16,9 @@ export function useDraft(conversationId: string) {
   const textRef = useRef<string>("");
   const revisionRef = useRef(0);
 
-  const syncText = useCallback((value: string) => {
+  const syncText = useCallback((value: string, render = true) => {
     textRef.current = value;
-    setText(value);
+    if (render) setText(value);
     const revision = ++revisionRef.current;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
@@ -65,6 +65,19 @@ export function useDraft(conversationId: string) {
     [syncText],
   );
 
+  // Used by the chat composer to keep the native textarea responsive without
+  // rerendering the entire composer tree for every keystroke.
+  const updateWithoutRender = useCallback(
+    (valueOrUpdater: Updater) => {
+      const next =
+        typeof valueOrUpdater === "function"
+          ? valueOrUpdater(textRef.current)
+          : valueOrUpdater;
+      syncText(next, false);
+    },
+    [syncText],
+  );
+
   const clear = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setText("");
@@ -74,5 +87,5 @@ export function useDraft(conversationId: string) {
     saveFn({ data: { conversationId, content: null } }).catch(() => {});
   }, [conversationId, saveFn]);
 
-  return { text, setText: update, clear, loaded };
+  return { text, setText: update, setTextWithoutRender: updateWithoutRender, textRef, clear, loaded };
 }
