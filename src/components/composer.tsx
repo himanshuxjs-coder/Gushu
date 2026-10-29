@@ -355,43 +355,46 @@ export function Composer({
     [conversationId, setTypingStatus, clearTypingStatus, meId],
   );
 
-  // Broadcast draft text with debounce (~100ms)
+  // Stream the latest draft at up to ~25 updates/second instead of waiting
+  // for a quiet period. A trailing timer always sends the newest text, so fast
+  // typing stays live without flooding Realtime with every keystroke.
+  const latestDraftTextRef = useRef("");
+  const lastDraftBroadcastAtRef = useRef(0);
   const broadcastDraft = useCallback(
     (currentText: string) => {
       if (!draftPreviewEnabled || !draftChannelRef.current) return;
+      if (currentText === latestDraftTextRef.current) return;
 
-      // Clear any pending debounce
-      if (draftDebounceRef.current) {
-        clearTimeout(draftDebounceRef.current);
-        draftDebounceRef.current = null;
-      }
-      if (draftAnimationFrameRef.current) {
-        cancelAnimationFrame(draftAnimationFrameRef.current);
-        draftAnimationFrameRef.current = null;
-      }
-
-      // Only broadcast if text actually changed
-      if (currentText === lastDraftTextRef.current) return;
+      latestDraftTextRef.current = currentText;
       lastDraftTextRef.current = currentText;
+      const minIntervalMs = 40;
+      const elapsed = Date.now() - lastDraftBroadcastAtRef.current;
 
-      // Keep local typing immediate, but coalesce network broadcasts so fast
-      // typists do not send one realtime event for every single keystroke.
-      draftDebounceRef.current = setTimeout(() => {
+      const sendLatest = () => {
         draftDebounceRef.current = null;
-        draftAnimationFrameRef.current = requestAnimationFrame(() => {
-          draftAnimationFrameRef.current = null;
-          if (!draftChannelRef.current) return;
+        if (!draftChannelRef.current) return;
+        const latestText = latestDraftTextRef.current;
+        const trimmed = latestText.trim();
+        lastDraftBroadcastAtRef.current = Date.now();
+        draftChannelRef.current
+          .send({
+            type: "broadcast",
+            event: trimmed ? "draft" : "draft-clear",
+            payload: trimmed ? { userId: meId, text: trimmed } : { userId: meId },
+          })
+          .catch(() => {});
+      };
 
-          const trimmed = currentText.trim();
-          draftChannelRef.current
-            .send({
-              type: "broadcast",
-              event: trimmed ? "draft" : "draft-clear",
-              payload: trimmed ? { userId: meId, text: trimmed } : { userId: meId },
-            })
-            .catch(() => {});
-        });
-      }, 120);
+      if (draftDebounceRef.current) {
+        // A timer is already queued; it will send the most recent value.
+        return;
+      }
+
+      if (elapsed >= minIntervalMs) {
+        sendLatest();
+      } else {
+        draftDebounceRef.current = setTimeout(sendLatest, minIntervalMs - elapsed);
+      }
     },
     [draftPreviewEnabled, meId],
   );
