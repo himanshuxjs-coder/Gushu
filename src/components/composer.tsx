@@ -411,6 +411,7 @@ export function Composer({
       draftAnimationFrameRef.current = null;
     }
     lastDraftTextRef.current = "";
+    latestDraftTextRef.current = "";
     draftChannelRef.current
       .send({
         type: "broadcast",
