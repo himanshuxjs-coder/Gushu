@@ -266,10 +266,17 @@ function ChatPage() {
             return cached;
           }
         }
-        const previous = queryClient.getQueryData<any>(["messages", conversationId]) ?? [];
-        const isIncremental = previous.length > 0;
-        let cursor = isIncremental ? previous[previous.length - 1]?.created_at : undefined;
-        let cursorId = isIncremental ? previous[previous.length - 1]?.id : undefined;
+        const previous = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
+        // Pending/failed local messages can have newer local timestamps than the
+        // server timeline. Never use them as a server catch-up cursor or older
+        // incoming messages can be skipped after reconnect.
+        const confirmedPrevious = previous.filter(
+          (message: any) => !message.is_optimistic && !message.send_failed,
+        );
+        const latestConfirmed = confirmedPrevious[confirmedPrevious.length - 1];
+        const isIncremental = Boolean(latestConfirmed);
+        let cursor = isIncremental ? latestConfirmed?.created_at : undefined;
+        let cursorId = isIncremental ? latestConfirmed?.id : undefined;
         let incoming: any[] = [];
         let page: any;
 
@@ -342,14 +349,17 @@ function ChatPage() {
       messageSyncInFlightRef.current = true;
       try {
         const cached = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
-        if (cached.length === 0) {
-          // A chat may be opened after navigating away while its query has no
-          // in-memory cache. Fetch the latest page directly instead of relying
-          // on React Query's stale-only refetch behavior.
+        const confirmedCached = cached.filter(
+          (message: any) => !message.is_optimistic && !message.send_failed,
+        );
+        if (confirmedCached.length === 0) {
+          // Fetch the latest server page when there is no confirmed server
+          // cursor yet. Merge it with local pending messages instead of replacing
+          // the cache, so offline sends remain visible and queued.
           const page = await listMsgs({
             data: { conversationId, limit: MESSAGE_PAGE_SIZE },
           });
-          const loaded = mergeMessages([], page.messages);
+          const loaded = mergeMessages(cached, page.messages);
           if (!cancelled) {
             queryClient.setQueryData(["messages", conversationId], loaded);
             queryClient.setQueryData(["messages-pagination", conversationId], {
@@ -358,16 +368,21 @@ function ChatPage() {
               beforeId: page.nextBeforeId,
             });
             await writeCachedMessages(meId, conversationId, loaded).catch(() => {});
-            const unreadIncoming = loaded.filter((message: any) =>
-              message.sender_id !== meId && !hasSeenReceipt(message)
+            const cachedIds = new Set(cached.map((message: any) => message.id));
+            const unreadIncoming = page.messages.filter((message: any) =>
+              !cachedIds.has(message.id) &&
+              message.sender_id !== meId &&
+              message.message_type !== "system" &&
+              !hasSeenReceipt(message)
             );
             showNewMessagesSeparator(unreadIncoming);
           }
           return;
         }
 
-        let cursor: string | undefined = cached[cached.length - 1]?.created_at;
-        let cursorId: string | undefined = cached[cached.length - 1]?.id;
+        // Use the newest confirmed database row, not the newest local timestamp.
+        let cursor: string | undefined = confirmedCached[confirmedCached.length - 1]?.created_at;
+        let cursorId: string | undefined = confirmedCached[confirmedCached.length - 1]?.id;
         const incoming: any[] = [];
 
         while (cursor && cursorId) {

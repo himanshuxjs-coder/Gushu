@@ -603,9 +603,11 @@ export function Composer({
         })
         .select()
         .single();
-        await removePendingTextMessage(optimisticId).catch(() => {});
+
+      // Keep the durable outbox entry until the server has confirmed the insert.
+      // Removing it before checking sendError loses messages on intermittent failures.
       if (sendError) throw sendError;
-      await removePendingTextMessage(optimisticId);
+      await removePendingTextMessage(optimisticId).catch(() => {});
 
       if (confirmedMessage) {
         queryClient.setQueryData(queryKey, (old: any) => {
