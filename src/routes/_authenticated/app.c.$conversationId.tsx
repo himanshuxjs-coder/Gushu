@@ -1271,6 +1271,10 @@ function ChatPage() {
     currentMessages.forEach((message: any) => knownIds.add(message.id));
     if (newIds.length === 0) return;
 
+    // Avoid animating a whole backlog at once after reconnect/catch-up; that
+    // creates needless simultaneous compositing work on slower Android devices.
+    if (newIds.length > 3) return;
+
     setEnteringMessageIds((previous) => {
       const next = new Set(previous);
       newIds.forEach((id: string) => next.add(id));

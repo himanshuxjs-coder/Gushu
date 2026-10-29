@@ -452,9 +452,15 @@
 }
 
 @utility animate-message-entry {
-  animation: message-entry 180ms cubic-bezier(0.2, 0, 0, 1) both;
+  animation: message-entry 150ms cubic-bezier(0.2, 0, 0, 1) both;
   will-change: transform, opacity;
   transform-origin: center bottom;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-message-entry {
+    animation: none !important;
+  }
 }
 
 @utility animate-in-scale {
