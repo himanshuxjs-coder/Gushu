@@ -66,7 +66,9 @@ export function Composer({
   onTypingChange?: (isTyping: boolean) => void;
   onDraftChange?: (text: string | null) => void;
 }) {
-  const { text, setText, clear: clearDraft, loaded: draftLoaded } = useDraft(conversationId);
+  const { setTextWithoutRender, clear: clearDraft, loaded: draftLoaded, textRef } = useDraft(conversationId);
+  const [hasText, setHasText] = useState(false);
+  const hasTextRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [emoji, setEmoji] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -151,13 +153,13 @@ export function Composer({
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }, []);
 
-  const openSchedule = useCallback((message = text, item: ScheduledMessage | null = null) => {
+  const openSchedule = useCallback((message = textRef.current, item: ScheduledMessage | null = null) => {
     setEditingSchedule(item);
     setScheduleContent(item?.content ?? message);
     setScheduleTime(item ? formatScheduleTimeForInput(item.scheduled_for) : defaultScheduleTime());
     setScheduleOpen(true);
     setScheduleListOpen(true);
-  }, [defaultScheduleTime, formatScheduleTimeForInput, text]);
+  }, [defaultScheduleTime, formatScheduleTimeForInput, textRef]);
 
   const closeSchedule = useCallback(() => {
     setScheduleOpen(false);
@@ -174,7 +176,7 @@ export function Composer({
         toast.success("Scheduled message updated");
       } else {
         await createScheduled({ data: { conversationId, content: scheduleContent, scheduledFor } });
-        setText("");
+        setComposerText("");
         clearDraftBroadcast();
         toast.success("Message scheduled");
       }
@@ -513,12 +515,12 @@ export function Composer({
   }, []);
 
   async function submit() {
-    const content = text.trim();
+    const content = textRef.current.trim();
     if (!content || busy) return;
 
     if (content.length > MAX_MESSAGE_LENGTH) {
       toast.error("Message cannot exceed 4000 characters.");
-      setText(content.slice(0, MAX_MESSAGE_LENGTH));
+      setComposerText(content.slice(0, MAX_MESSAGE_LENGTH));
       return;
     }
 
@@ -570,6 +572,12 @@ export function Composer({
     };
 
     clearDraft();
+    if (textareaRef.current) textareaRef.current.value = "";
+    if (hasTextRef.current) {
+      hasTextRef.current = false;
+      setHasText(false);
+    }
+    scheduleTextareaResize();
     clearDraftBroadcast();
     queryClient.setQueryData(queryKey, (old: any) => [...(old || []), newMessage]);
     queryClient.setQueryData(["conversations"], (old: any) => {
@@ -688,7 +696,7 @@ export function Composer({
       } else {
         if (queuedLocally) await removePendingTextMessage(optimisticId).catch(() => {});
         toast.error(e?.message ?? "Send failed");
-        setText((current) => current || content);
+        if (!textRef.current) setComposerText(content);
         queryClient.setQueryData(queryKey, (old: any) => {
           return (old || []).map((msg: any) => {
             if (msg.id === optimisticId) {
@@ -720,33 +728,59 @@ export function Composer({
   }, []);
 
   useEffect(() => {
-    if (draftLoaded) scheduleTextareaResize();
+    if (!draftLoaded) return;
+    // Draft restoration is the only time the uncontrolled textarea needs its
+    // value synchronized from React state; ordinary keystrokes stay DOM-local.
+    if (textareaRef.current) textareaRef.current.value = textRef.current;
+    const restoredHasText = Boolean(textRef.current.trim());
+    hasTextRef.current = restoredHasText;
+    setHasText(restoredHasText);
+    scheduleTextareaResize();
     return () => {
       if (textareaResizeFrameRef.current !== null) {
         cancelAnimationFrame(textareaResizeFrameRef.current);
         textareaResizeFrameRef.current = null;
       }
     };
-  }, [draftLoaded, scheduleTextareaResize]);
+  }, [draftLoaded, scheduleTextareaResize, textRef]);
+
+  const setComposerText = useCallback(
+    (valueOrUpdater: string | ((previous: string) => string)) => {
+      const previous = textRef.current;
+      const nextValue = typeof valueOrUpdater === "function"
+        ? valueOrUpdater(previous)
+        : valueOrUpdater;
+      const boundedValue = nextValue.slice(0, MAX_MESSAGE_LENGTH);
+      setTextWithoutRender(boundedValue);
+      if (textareaRef.current && textareaRef.current.value !== boundedValue) {
+        textareaRef.current.value = boundedValue;
+      }
+      const nextHasText = Boolean(boundedValue.trim());
+      if (nextHasText !== hasTextRef.current) {
+        hasTextRef.current = nextHasText;
+        setHasText(nextHasText);
+      }
+      scheduleTextareaResize();
+      handleTyping(boundedValue);
+      broadcastDraft(boundedValue);
+    },
+    [textRef, setTextWithoutRender, scheduleTextareaResize, handleTyping, broadcastDraft],
+  );
 
   const handleTextChange = useCallback(
     (value: string) => {
-      const nextValue = value.length > MAX_MESSAGE_LENGTH ? value.slice(0, MAX_MESSAGE_LENGTH) : value;
-      scheduleTextareaResize();
-      setText(nextValue);
-      handleTyping(nextValue);
-      broadcastDraft(nextValue);
+      setComposerText(value);
       if (value.length > MAX_MESSAGE_LENGTH) {
         toast.error("Message cannot exceed 4000 characters.");
       }
     },
-    [handleTyping, broadcastDraft, scheduleTextareaResize, setText],
+    [setComposerText],
   );
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key !== "Enter") return;
     if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
-    if (e.nativeEvent.isComposing || !text.trim()) return;
+    if (e.nativeEvent.isComposing || !textRef.current.trim()) return;
 
     e.preventDefault();
     void submit();
@@ -872,7 +906,7 @@ export function Composer({
         />
         <Textarea
           ref={textareaRef}
-          value={text}
+          defaultValue=""
           onChange={(e) => handleTextChange(e.target.value)}
           onFocus={() => {
             setIsFocused(true);
@@ -893,9 +927,9 @@ export function Composer({
           className="min-h-[40px] flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-sm focus-visible:ring-0 sm:py-2"
         />
 
-        <EmojiPickerWrapper text={text} setText={setText} />
+        <EmojiPickerWrapper setText={setComposerText} />
 
-        {!text.trim() && !busy && (
+        {!hasText && !busy && (
           <div className="flex items-center gap-1 sm:gap-2">
             <Button
               type="button"
@@ -920,7 +954,7 @@ export function Composer({
           </div>
         )}
 
-        {text.trim() && (
+        {hasText && (
           <Button
             type="button"
             onPointerDown={handleSendPointerDown}
@@ -938,7 +972,7 @@ export function Composer({
               }
               void submit();
             }}
-            disabled={busy || !text.trim()}
+            disabled={busy || !hasText}
             className={cn("h-8 rounded-xl px-3 sm:h-10 sm:px-4 sm:gap-1.5")}
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
@@ -1002,7 +1036,7 @@ export function Composer({
   );
 }
 
-function EmojiPickerWrapper({ text, setText }: { text: string; setText: (t: string | ((prev: string) => string)) => void }) {
+function EmojiPickerWrapper({ setText }: { setText: (t: string | ((prev: string) => string)) => void }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
 
