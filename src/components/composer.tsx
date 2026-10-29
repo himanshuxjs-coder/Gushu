@@ -91,6 +91,7 @@ export function Composer({
   const draftChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const draftDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const draftAnimationFrameRef = useRef<number | null>(null);
+  const textareaResizeFrameRef = useRef<number | null>(null);
   const lastDraftTextRef = useRef<string>("");
   const onTypingChangeRef = useRef(onTypingChange);
   const onDraftChangeRef = useRef(onDraftChange);
@@ -292,6 +293,14 @@ export function Composer({
         clearTimeout(draftDebounceRef.current);
         draftDebounceRef.current = null;
       }
+      if (draftAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(draftAnimationFrameRef.current);
+        draftAnimationFrameRef.current = null;
+      }
+      if (textareaResizeFrameRef.current !== null) {
+        cancelAnimationFrame(textareaResizeFrameRef.current);
+        textareaResizeFrameRef.current = null;
+      }
     };
   }, [conversationId, draftPreviewEnabled, meId]);
 
@@ -363,28 +372,24 @@ export function Composer({
       if (currentText === lastDraftTextRef.current) return;
       lastDraftTextRef.current = currentText;
 
-      draftAnimationFrameRef.current = requestAnimationFrame(() => {
-        if (!draftChannelRef.current) return;
+      // Keep local typing immediate, but coalesce network broadcasts so fast
+      // typists do not send one realtime event for every single keystroke.
+      draftDebounceRef.current = setTimeout(() => {
+        draftDebounceRef.current = null;
+        draftAnimationFrameRef.current = requestAnimationFrame(() => {
+          draftAnimationFrameRef.current = null;
+          if (!draftChannelRef.current) return;
 
-        const trimmed = currentText.trim();
-        if (trimmed) {
+          const trimmed = currentText.trim();
           draftChannelRef.current
             .send({
               type: "broadcast",
-              event: "draft",
-              payload: { userId: meId, text: trimmed },
+              event: trimmed ? "draft" : "draft-clear",
+              payload: trimmed ? { userId: meId, text: trimmed } : { userId: meId },
             })
             .catch(() => {});
-        } else {
-          draftChannelRef.current
-            .send({
-              type: "broadcast",
-              event: "draft-clear",
-              payload: { userId: meId },
-            })
-            .catch(() => {});
-        }
-      });
+        });
+      }, 120);
     },
     [draftPreviewEnabled, meId],
   );
@@ -395,6 +400,10 @@ export function Composer({
     if (draftDebounceRef.current) {
       clearTimeout(draftDebounceRef.current);
       draftDebounceRef.current = null;
+    }
+    if (draftAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(draftAnimationFrameRef.current);
+      draftAnimationFrameRef.current = null;
     }
     lastDraftTextRef.current = "";
     draftChannelRef.current
@@ -695,9 +704,35 @@ export function Composer({
     }
   }
 
+  const scheduleTextareaResize = useCallback(() => {
+    if (textareaResizeFrameRef.current !== null) {
+      cancelAnimationFrame(textareaResizeFrameRef.current);
+    }
+    textareaResizeFrameRef.current = requestAnimationFrame(() => {
+      textareaResizeFrameRef.current = null;
+      const element = textareaRef.current;
+      if (!element) return;
+      element.style.height = "auto";
+      const maxHeight = 144;
+      element.style.height = `${Math.min(Math.max(element.scrollHeight, 40), maxHeight)}px`;
+      element.style.overflowY = element.scrollHeight > maxHeight ? "auto" : "hidden";
+    });
+  }, []);
+
+  useEffect(() => {
+    if (draftLoaded) scheduleTextareaResize();
+    return () => {
+      if (textareaResizeFrameRef.current !== null) {
+        cancelAnimationFrame(textareaResizeFrameRef.current);
+        textareaResizeFrameRef.current = null;
+      }
+    };
+  }, [draftLoaded, scheduleTextareaResize]);
+
   const handleTextChange = useCallback(
     (value: string) => {
       const nextValue = value.length > MAX_MESSAGE_LENGTH ? value.slice(0, MAX_MESSAGE_LENGTH) : value;
+      scheduleTextareaResize();
       setText(nextValue);
       handleTyping(nextValue);
       broadcastDraft(nextValue);
@@ -705,7 +740,7 @@ export function Composer({
         toast.error("Message cannot exceed 4000 characters.");
       }
     },
-    [handleTyping, broadcastDraft],
+    [handleTyping, broadcastDraft, scheduleTextareaResize, setText],
   );
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
