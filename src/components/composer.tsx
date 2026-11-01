@@ -625,7 +625,7 @@ export function Composer({
 
       clearTypingStatus({ data: { conversationId } }).catch(() => {});
 
-      let sendResult: Awaited<ReturnType<typeof supabase.from<"messages">["insert"]>>;
+      let sendResult: any;
       try {
         sendResult = await supabase
           .from("messages")
