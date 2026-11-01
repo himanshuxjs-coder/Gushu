@@ -23,14 +23,15 @@ type R = {
 };
 
 function withTimeout<T>(task: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
-    task.then(resolve, reject).finally(() => window.clearTimeout(timer));
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
   });
+  return Promise.race([task, timeout]).finally(() => clearTimeout(timer!));
 }
 
 function wait(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function UserSearch({ directory }: { directory: R[] | null }) {
