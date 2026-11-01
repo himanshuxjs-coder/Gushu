@@ -71,9 +71,11 @@ function ChatPage() {
   });
   const getConv = useServerFn(getConversation);
   const listMsgsServer = useServerFn(listMessages);
+  const listMsgsServerRef = useRef(listMsgsServer);
+  listMsgsServerRef.current = listMsgsServer;
   const listMsgs = useCallback(
-    (args: any) => withTimeout(listMsgsServer(args), 12_000, "Message loading"),
-    [listMsgsServer],
+    (args: any) => withTimeout(listMsgsServerRef.current(args), 12_000, "Message loading"),
+    [],
   );
   const getMsg = useServerFn(getMessage);
   const mark = useServerFn(markRead);
