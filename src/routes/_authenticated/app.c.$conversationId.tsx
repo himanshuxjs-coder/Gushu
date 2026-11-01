@@ -53,10 +53,11 @@ const WALLPAPER_STYLE: Record<string, string> = {
 const MESSAGE_PAGE_SIZE = 100;
 
 function withTimeout<T>(task: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
-    task.then(resolve, reject).finally(() => window.clearTimeout(timer));
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
   });
+  return Promise.race([task, timeout]).finally(() => clearTimeout(timer!));
 }
 
 function ChatPage() {
@@ -133,11 +134,19 @@ function ChatPage() {
     queryKey: ["conversation", conversationId],
     queryFn: async () => {
       try {
-        return await withTimeout(
+        const conversation = await withTimeout(
           getConv({ data: { id: conversationId } }),
           10_000,
           "Conversation loading",
         );
+        if (conversation) return conversation;
+
+        const cachedConversations = queryClient.getQueryData<any[]>(["conversations"]);
+        const cachedConversation = cachedConversations?.find((item) => item.id === conversationId);
+        if (cachedConversation) {
+          return { id: conversationId, other: cachedConversation.other ?? null };
+        }
+        throw new Error("Conversation not found or access denied");
       } catch (error) {
         const cachedConversations = queryClient.getQueryData<any[]>(["conversations"]);
         const cachedConversation = cachedConversations?.find((item) => item.id === conversationId);
