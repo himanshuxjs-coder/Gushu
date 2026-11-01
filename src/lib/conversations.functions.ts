@@ -18,12 +18,14 @@ export const checkConversationAccess = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ conversationId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     // Check if conversation is hidden with a secret code for this user
-    const { data: settings } = await context.supabase
+    const { data: settings, error } = await context.supabase
       .from("conversation_settings")
       .select("is_hidden, secret_code_hash")
       .eq("conversation_id", data.conversationId)
       .eq("user_id", context.userId)
       .maybeSingle();
+
+    if (error) throw new Error(`Could not verify chat access: ${error.message}`);
 
     const requiresSecretCode = settings?.is_hidden && settings?.secret_code_hash;
     return {

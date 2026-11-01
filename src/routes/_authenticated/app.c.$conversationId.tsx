@@ -52,6 +52,14 @@ const WALLPAPER_STYLE: Record<string, string> = {
 
 const MESSAGE_PAGE_SIZE = 100;
 
+function withTimeout<T>(task: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
+  });
+  return Promise.race([task, timeout]).finally(() => clearTimeout(timer!));
+}
+
 function ChatPage() {
   const { conversationId } = Route.useParams();
   const location = useLocation();
@@ -62,7 +70,13 @@ function ChatPage() {
     staleTime: 60000,
   });
   const getConv = useServerFn(getConversation);
-  const listMsgs = useServerFn(listMessages);
+  const listMsgsServer = useServerFn(listMessages);
+  const listMsgsServerRef = useRef(listMsgsServer);
+  listMsgsServerRef.current = listMsgsServer;
+  const listMsgs = useCallback(
+    (args: any) => withTimeout(listMsgsServerRef.current(args), 12_000, "Message loading"),
+    [],
+  );
   const getMsg = useServerFn(getMessage);
   const mark = useServerFn(markRead);
   const expireMsg = useServerFn(expireMessage);
@@ -122,7 +136,19 @@ function ChatPage() {
     queryKey: ["conversation", conversationId],
     queryFn: async () => {
       try {
-        return await getConv({ data: { id: conversationId } });
+        const conversation = await withTimeout(
+          getConv({ data: { id: conversationId } }),
+          10_000,
+          "Conversation loading",
+        );
+        if (conversation) return conversation;
+
+        const cachedConversations = queryClient.getQueryData<any[]>(["conversations"]);
+        const cachedConversation = cachedConversations?.find((item) => item.id === conversationId);
+        if (cachedConversation) {
+          return { id: conversationId, other: cachedConversation.other ?? null };
+        }
+        throw new Error("Conversation not found or access denied");
       } catch (error) {
         const cachedConversations = queryClient.getQueryData<any[]>(["conversations"]);
         const cachedConversation = cachedConversations?.find((item) => item.id === conversationId);
@@ -133,13 +159,20 @@ function ChatPage() {
       }
     },
     staleTime: 30000,
+    retry: 1,
+    retryDelay: 500,
+    refetchOnWindowFocus: false,
   });
 
   const settingsQuery = useQuery({
     queryKey: ["conv-settings", conversationId],
     queryFn: async () => {
       try {
-        const settings = await getSettings({ data: { conversationId } });
+        const settings = await withTimeout(
+          getSettings({ data: { conversationId } }),
+          10_000,
+          "Privacy settings check",
+        );
         void writeCachedPrivacySettings(meId, conversationId, settings).catch(() => {});
         return settings;
       } catch (error) {
@@ -149,6 +182,8 @@ function ChatPage() {
       }
     },
     staleTime: 60000,
+    retry: 1,
+    retryDelay: 500,
     refetchOnWindowFocus: false,
   });
 
@@ -325,6 +360,8 @@ function ChatPage() {
     },
     enabled: settingsQuery.isSuccess && !isLocked && !isHiddenLocked,
     staleTime: 15000,
+    retry: 1,
+    retryDelay: 500,
     // Message inserts arrive through Realtime. Catch-up is event-driven (resume/reconnect),
     // not periodic polling.
     refetchOnWindowFocus: false,
@@ -1628,6 +1665,19 @@ function ChatPage() {
         otherIsViewing={otherIsViewing}
       />
 
+      {conv.isError && !conv.data && (
+        <div className="mx-4 mt-2 flex items-center justify-center gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-500" role="alert">
+          <span>Opening failed — chat details could not be loaded.</span>
+          <button
+            type="button"
+            onClick={() => void conv.refetch()}
+            className="font-semibold underline underline-offset-2"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
       {!settingsQuery.isSuccess ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
           {settingsQuery.isLoading ? (
@@ -1638,14 +1688,14 @@ function ChatPage() {
           <p>
             {settingsQuery.isLoading
               ? "Checking chat privacy settings"
-              : "Could not verify this chat's privacy settings"}
+              : "Opening failed — could not verify this chat's privacy settings"}
           </p>
           {settingsQuery.isError && (
             <button
               onClick={() => void settingsQuery.refetch()}
               className="rounded-lg border px-3 py-1.5 text-xs text-foreground"
             >
-              Retry
+              Try again
             </button>
           )}
         </div>
