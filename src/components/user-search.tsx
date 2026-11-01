@@ -22,6 +22,17 @@ type R = {
   verified: boolean;
 };
 
+function withTimeout<T>(task: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
+    task.then(resolve, reject).finally(() => window.clearTimeout(timer));
+  });
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 export function UserSearch({ directory }: { directory: R[] | null }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<R[]>([]);
@@ -33,7 +44,9 @@ export function UserSearch({ directory }: { directory: R[] | null }) {
   const [secretCodeInput, setSecretCodeInput] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [openingUserId, setOpeningUserId] = useState<string | null>(null);
+  const [openingFailedUserId, setOpeningFailedUserId] = useState<string | null>(null);
   const openingUserRef = useRef<string | null>(null);
+  const retryConversationRef = useRef<{ userId: string; conversationId: string | null } | null>(null);
   const search = useServerFn(searchUsers);
   const create = useServerFn(getOrCreateConversation);
   const checkAccess = useServerFn(checkConversationAccess);
@@ -143,27 +156,78 @@ export function UserSearch({ directory }: { directory: R[] | null }) {
   }, []);
 
   async function start(user: R) {
-    // Lock immediately so a double click cannot create duplicate navigation requests.
+    // A timed-out create request may still finish on the server. Reuse its
+    // conversation ID on retries so we never intentionally create a second chat.
     if (openingUserRef.current) return;
     openingUserRef.current = user.id;
     setOpeningUserId(user.id);
+    setOpeningFailedUserId(null);
+
+    let conversationId =
+      retryConversationRef.current?.userId === user.id
+        ? retryConversationRef.current.conversationId
+        : null;
+    let lastError: unknown = null;
+
     try {
-      const { id } = await create({ data: { otherUserId: user.id } });
+      // One automatic retry, followed by a visible manual retry action.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          if (!conversationId) {
+            const created = await withTimeout(
+              create({ data: { otherUserId: user.id } }),
+              12_000,
+              "Conversation creation",
+            );
+            conversationId = created.id;
+            retryConversationRef.current = { userId: user.id, conversationId };
+          }
 
-      // Keep the selected result and its progress line visible while access is checked.
-      const access = await checkAccess({ data: { conversationId: id } });
+          const access = await withTimeout(
+            checkAccess({ data: { conversationId } }),
+            10_000,
+            "Chat access check",
+          );
 
-      if (access.requiresSecretCode) {
-        setSecretCodePrompt({ user, conversationId: id });
-        setOpen(false);
-        return;
+          if (access.requiresSecretCode) {
+            setSecretCodePrompt({ user, conversationId });
+            setOpen(false);
+            retryConversationRef.current = null;
+            return;
+          }
+
+          const targetPath = `/app/c/${conversationId}`;
+          try {
+            await withTimeout(
+              navigate({ to: "/app/c/$conversationId", params: { conversationId } }),
+              12_000,
+              "Chat navigation",
+            );
+          } catch (navigationError) {
+            // Router navigation may have completed even if a transition promise
+            // stalled. Do not navigate away from a route that is already active.
+            if (!window.location.pathname.includes(targetPath)) throw navigationError;
+          }
+
+          setQ("");
+          setOpen(false);
+          retryConversationRef.current = null;
+          return;
+        } catch (error) {
+          lastError = error;
+          if (attempt === 0) await wait(500);
+        }
       }
 
-      setQ("");
-      setOpen(false);
-      await navigate({ to: "/app/c/$conversationId", params: { conversationId: id } });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Could not start chat");
+      console.error("[Gushu] Chat opening failed after retry", {
+        userId: user.id,
+        conversationId,
+        error: lastError,
+      });
+      retryConversationRef.current = { userId: user.id, conversationId };
+      setOpeningFailedUserId(user.id);
+      setOpen(true);
+      toast.error("Opening failed. Tap Try again to reopen the chat.");
     } finally {
       openingUserRef.current = null;
       setOpeningUserId(null);
@@ -220,6 +284,7 @@ export function UserSearch({ directory }: { directory: R[] | null }) {
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
+            setOpeningFailedUserId(null);
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
@@ -305,6 +370,21 @@ export function UserSearch({ directory }: { directory: R[] | null }) {
                     {u.verified && <VerifiedBadge size={12} />}
                   </div>
                   <div className="truncate text-[11px] text-muted-foreground transition-colors group-hover:text-primary">@{u.username}</div>
+                  {openingFailedUserId === u.id && (
+                    <div className="mt-1 flex items-center gap-2 text-[11px] text-red-500" role="alert">
+                      <span>Opening failed</span>
+                      <button
+                        type="button"
+                        className="font-semibold underline underline-offset-2 hover:no-underline"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void start(u);
+                        }}
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  )}
                 </div>
                 {openingUserId === u.id && (
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] overflow-hidden bg-primary/15" aria-label="Opening chat" role="progressbar">
