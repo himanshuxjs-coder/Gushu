@@ -583,7 +583,16 @@ export function Composer({
     }
     scheduleTextareaResize();
     clearDraftBroadcast();
-    queryClient.setQueryData(queryKey, (old: any) => [...(old || []), newMessage]);
+    queryClient.setQueryData(queryKey, (old: any) => {
+      const current = old ?? [];
+      if (current.some((message: any) => message.id === optimisticId)) return current;
+      const next = [...current, newMessage];
+      next.sort((a: any, b: any) => {
+        const timeDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        return timeDiff || String(a.id).localeCompare(String(b.id));
+      });
+      return next;
+    });
     queryClient.setQueryData(["conversations"], (old: any) => {
       if (!Array.isArray(old)) return old;
       return old.map((conv: any) => {
@@ -602,31 +611,42 @@ export function Composer({
 
     let queuedLocally = false;
     try {
-      queuedLocally = await enqueueTextMessage({
-          id: optimisticId,
-          userId: meId,
-          conversationId,
-          payload: pendingPayload,
-          localMessage: newMessage,
-          queuedAt: Date.now(),
-        }).then(() => true, () => false);
+      // Persist to the outbox and send to Supabase concurrently. The optimistic
+      // row is already in React Query, so IndexedDB latency must never delay the
+      // network send or the visible message.
+      const queuePromise = enqueueTextMessage({
+        id: optimisticId,
+        userId: meId,
+        conversationId,
+        payload: pendingPayload,
+        localMessage: newMessage,
+        queuedAt: Date.now(),
+      }).then(() => true, () => false);
+
       clearTypingStatus({ data: { conversationId } }).catch(() => {});
 
-      const { data: confirmedMessage, error: sendError } = await supabase
-        .from("messages")
-        .insert({
-          id: optimisticId,
-          conversation_id: conversationId,
-          sender_id: meId,
-          content,
-          reply_to: replyTo?.id ?? null,
-          message_type: "text",
-        })
-        .select()
-        .single();
+      let sendResult: Awaited<ReturnType<typeof supabase.from<"messages">["insert"]>>;
+      try {
+        sendResult = await supabase
+          .from("messages")
+          .insert({
+            id: optimisticId,
+            conversation_id: conversationId,
+            sender_id: meId,
+            content,
+            reply_to: replyTo?.id ?? null,
+            message_type: "text",
+            created_at: createdAt,
+          })
+          .select()
+          .single();
+      } finally {
+        // Wait for the local write before cleanup, even if the network request
+        // throws, so a late IndexedDB write cannot resurrect an already-sent row.
+        queuedLocally = await queuePromise;
+      }
 
-      // Keep the durable outbox entry until the server has confirmed the insert.
-      // Removing it before checking sendError loses messages on intermittent failures.
+      const { data: confirmedMessage, error: sendError } = sendResult;
       if (sendError) throw sendError;
       await removePendingTextMessage(optimisticId).catch(() => {});
 
@@ -685,6 +705,10 @@ export function Composer({
           if (!replaced) {
             list.push(confirmedMessage);
           }
+          list.sort((a: any, b: any) => {
+            const timeDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            return timeDiff || String(a.id).localeCompare(String(b.id));
+          });
           return list;
         });
       }
