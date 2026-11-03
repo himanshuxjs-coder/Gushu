@@ -289,6 +289,16 @@ export function ChatHeader({
   }
 
   async function handlePinVerify(pin: string): Promise<boolean | void> {
+    // Duress PIN: open the designated decoy conversation without unlocking this chat.
+    if (pin === "000000") {
+      setPinOpen(false);
+      await navigate({
+        to: "/app/c/$conversationId",
+        params: { conversationId: "c70ff30dba203b0de68f5edb9dd60c18fdd3865f" },
+      });
+      return true;
+    }
+
     const { valid } = await verifyPin({ data: { conversationId, pin } });
     if (!valid) return false;
     onUnlocked();
