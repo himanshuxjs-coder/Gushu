@@ -257,13 +257,19 @@ export function Composer({
     });
     draftChannel
       .on("broadcast", { event: "draft" }, (payload) => {
-        const data = payload.payload as { userId: string; text: string } | null;
+        const data = payload.payload as { userId: string; text: string; seq?: number } | null;
         if (!data || data.userId === meId) return;
-        onDraftChangeRef.current?.(data.text || null);
+        const previousSeq = lastDraftSequenceRef.current.get(data.userId) ?? -1;
+        if (typeof data.seq === "number" && data.seq <= previousSeq) return;
+        if (typeof data.seq === "number") lastDraftSequenceRef.current.set(data.userId, data.seq);
+        onDraftChangeRef.current?.(data.text ?? null);
       })
       .on("broadcast", { event: "draft-clear" }, (payload) => {
-        const data = payload.payload as { userId: string } | null;
+        const data = payload.payload as { userId: string; seq?: number } | null;
         if (!data || data.userId === meId) return;
+        const previousSeq = lastDraftSequenceRef.current.get(data.userId) ?? -1;
+        if (typeof data.seq === "number" && data.seq <= previousSeq) return;
+        if (typeof data.seq === "number") lastDraftSequenceRef.current.set(data.userId, data.seq);
         onDraftChangeRef.current?.(null);
       })
       .on("broadcast", { event: "typing" }, (payload) => {
@@ -355,11 +361,10 @@ export function Composer({
     [conversationId, setTypingStatus, clearTypingStatus, meId],
   );
 
-  // Stream the latest draft at up to ~25 updates/second instead of waiting
-  // for a quiet period. A trailing timer always sends the newest text, so fast
-  // typing stays live without flooding Realtime with every keystroke.
+  // Broadcast every input change immediately. Sequence numbers let the receiver
+  // discard delayed/out-of-order packets, so a stale partial draft cannot replace
+  // a newer full draft when the connection is busy.
   const latestDraftTextRef = useRef("");
-  const lastDraftBroadcastAtRef = useRef(0);
   const broadcastDraft = useCallback(
     (currentText: string) => {
       if (!draftPreviewEnabled || !draftChannelRef.current) return;
@@ -367,34 +372,15 @@ export function Composer({
 
       latestDraftTextRef.current = currentText;
       lastDraftTextRef.current = currentText;
-      const minIntervalMs = 40;
-      const elapsed = Date.now() - lastDraftBroadcastAtRef.current;
-
-      const sendLatest = () => {
-        draftDebounceRef.current = null;
-        if (!draftChannelRef.current) return;
-        const latestText = latestDraftTextRef.current;
-        const trimmed = latestText.trim();
-        lastDraftBroadcastAtRef.current = Date.now();
-        draftChannelRef.current
-          .send({
-            type: "broadcast",
-            event: trimmed ? "draft" : "draft-clear",
-            payload: trimmed ? { userId: meId, text: trimmed } : { userId: meId },
-          })
-          .catch(() => {});
-      };
-
-      if (draftDebounceRef.current) {
-        // A timer is already queued; it will send the most recent value.
-        return;
-      }
-
-      if (elapsed >= minIntervalMs) {
-        sendLatest();
-      } else {
-        draftDebounceRef.current = setTimeout(sendLatest, minIntervalMs - elapsed);
-      }
+      const seq = ++draftSequenceRef.current;
+      const hasText = currentText.length > 0;
+      void draftChannelRef.current.send({
+        type: "broadcast",
+        event: hasText ? "draft" : "draft-clear",
+        payload: hasText
+          ? { userId: meId, text: currentText, seq }
+          : { userId: meId, seq },
+      }).catch(() => {});
     },
     [draftPreviewEnabled, meId],
   );
@@ -412,11 +398,12 @@ export function Composer({
     }
     lastDraftTextRef.current = "";
     latestDraftTextRef.current = "";
+    const seq = ++draftSequenceRef.current;
     draftChannelRef.current
       .send({
         type: "broadcast",
         event: "draft-clear",
-        payload: { userId: meId },
+        payload: { userId: meId, seq },
       })
       .catch(() => {});
   }, [meId]);
@@ -572,7 +559,6 @@ export function Composer({
       content,
       reply_to: replyTo?.id ?? null,
       message_type: "text" as const,
-      created_at: createdAt,
     };
 
     clearDraft();
@@ -636,7 +622,6 @@ export function Composer({
             content,
             reply_to: replyTo?.id ?? null,
             message_type: "text",
-            created_at: createdAt,
           })
           .select()
           .single();
