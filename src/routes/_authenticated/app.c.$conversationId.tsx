@@ -308,15 +308,12 @@ function ChatPage() {
         // Pending/failed local messages can have newer local timestamps than the
         // server timeline. Never use them as a server catch-up cursor or older
         // incoming messages can be skipped after reconnect.
-        const confirmedPrevious = previous.filter(
-          (message: any) => !message.is_optimistic && !message.send_failed,
-        );
-        const latestConfirmed = confirmedPrevious[confirmedPrevious.length - 1];
-        const isIncremental = Boolean(latestConfirmed);
-        // On first entry, start at local midnight and fetch every message today.
-        // Subsequent refetches fetch only rows newer than the newest cached row.
-        let cursor = isIncremental ? latestConfirmed?.created_at : todayStartIso;
-        let cursorId = isIncremental ? latestConfirmed?.id : undefined;
+        // Always reconcile the full current day from local midnight. A cache
+        // may contain only the latest 100 messages, which is not enough when
+        // a busy conversation has more messages today.
+        const isIncremental = false;
+        let cursor: string | undefined = todayStartIso;
+        let cursorId: string | undefined = undefined;
         let incoming: any[] = [];
         let page: any;
 
