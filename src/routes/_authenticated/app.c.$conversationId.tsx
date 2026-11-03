@@ -366,10 +366,11 @@ function ChatPage() {
       }
     },
     enabled: settingsQuery.isSuccess && !isLocked && !isHiddenLocked,
-    staleTime: 15000,
+    staleTime: 0,
     retry: 1,
     retryDelay: 500,
-    // Message inserts arrive through Realtime. Catch-up is event-driven (resume/reconnect),
+    // Re-entering a chat must re-check the complete current-day timeline. Message
+    // inserts arrive through Realtime; catch-up is event-driven (resume/reconnect),
     // not periodic polling.
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -631,12 +632,32 @@ function ChatPage() {
     }
   }, [conversationId, listMsgs, meId, pagination.data, queryClient, visibleMessageLimit]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStartIso = todayStart.toISOString();
+
+    // Remove previously loaded yesterday/older history on chat entry so it
+    // cannot appear above or displace today's complete timeline.
+    queryClient.setQueryData<any[]>(["messages", conversationId], (current) =>
+      Array.isArray(current)
+        ? current.filter((message: any) =>
+            new Date(message.created_at).getTime() >= todayStart.getTime() ||
+            message.is_optimistic || message.send_failed
+          )
+        : current
+    );
+    queryClient.setQueryData(["messages-pagination", conversationId], {
+      hasMoreOlder: true,
+      beforeCreatedAt: todayStartIso,
+      beforeId: null,
+    });
+
     setVisibleMessageLimit(Number.MAX_SAFE_INTEGER);
     loadingOlderRef.current = false;
     preserveScrollRef.current = null;
     initialScrollDoneRef.current = false;
-  }, [conversationId]);
+  }, [conversationId, queryClient]);
 
   const unreadMessages = useMemo(
     () => (msgs.data ?? []).filter((message: any) => message.sender_id !== meId && !hasSeenReceipt(message)),
