@@ -339,6 +339,26 @@ export const markRead = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
+    // When the client supplies message IDs, mark only the messages that were
+    // actually visible in the chat viewport. This prevents opening a chat at
+    // the oldest new message from marking the entire backlog as seen.
+    if (data.messageIds?.length) {
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from("messages")
+        .update({
+          seen_at: now,
+          first_read_at: now,
+          read_at: now,
+          viewed_at: now,
+        })
+        .eq("conversation_id", data.conversationId)
+        .neq("sender_id", userId)
+        .in("id", data.messageIds);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
     const { error } = await supabase.rpc("mark_conversation_read", {
       _conv_id: data.conversationId,
       _viewer_id: userId,
