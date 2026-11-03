@@ -176,9 +176,10 @@ export const listMessages = createServerFn({ method: "POST" })
     const byId = new Map<string, any>();
     for (const row of pageRows) byId.set(row.id, row);
     for (const row of savedRows) byId.set(row.id, row);
-    const merged = Array.from(byId.values()).sort(
-      (left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
-    );
+    const merged = Array.from(byId.values()).sort((left, right) => {
+      const timeDiff = new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+      return timeDiff || String(left.id).localeCompare(String(right.id));
+    });
     const enriched = await enrichMessages({
       supabase,
       userId,
