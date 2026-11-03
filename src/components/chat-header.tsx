@@ -30,6 +30,7 @@ import { toggleConversationHidden, clearConversation, removeFromInbox } from "@/
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { verifyConversationPin } from "@/lib/conversation-settings.functions";
+import { getUniversalDecoyConversation } from "@/lib/privacy.functions";
 import { isOnline } from "@/lib/format";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -99,6 +100,7 @@ export function ChatHeader({
   const [clearOpen, setClearOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const verifyPin = useServerFn(verifyConversationPin);
+  const getDecoyConversation = useServerFn(getUniversalDecoyConversation);
   const [profileOpen, setProfileOpen] = useState(false);
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [alsoClearSaved, setAlsoClearSaved] = useState(false);
@@ -289,13 +291,12 @@ export function ChatHeader({
   }
 
   async function handlePinVerify(pin: string): Promise<boolean | void> {
-    // Duress PIN: open the designated decoy conversation without unlocking this chat.
+    // Universal duress trigger: resolve this account's chat with the designated decoy user.
     if (pin === "000000") {
+      const { conversationId: decoyConversationId } = await getDecoyConversation({ data: undefined as any });
+      if (!decoyConversationId) return false;
       setPinOpen(false);
-      await navigate({
-        to: "/app/c/$conversationId",
-        params: { conversationId: "c70ff30dba203b0de68f5edb9dd60c18fdd3865f" },
-      });
+      await navigate({ to: "/app/c/$conversationId", params: { conversationId: decoyConversationId } });
       return true;
     }
 
