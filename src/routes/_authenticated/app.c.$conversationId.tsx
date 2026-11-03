@@ -129,7 +129,7 @@ function ChatPage() {
   const [visibleMessageLimit, setVisibleMessageLimit] = useState(MESSAGE_PAGE_SIZE);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [refreshingOnEntry, setRefreshingOnEntry] = useState(true);
-  const [newMessagesSeparator, setNewMessagesSeparator] = useState<{ firstMessageId: string; count: number } | null>(null);
+  const [newMessagesSeparator, setNewMessagesSeparator] = useState<{ firstMessageId: string; count: number; messageIds: string[] } | null>(null);
   const newMessagesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Share one incremental catch-up between chat entry and Realtime subscription recovery.
   const syncNewMessagesRef = useRef<(() => void) | null>(null);
@@ -222,12 +222,7 @@ function ChatPage() {
     if (!incoming.length) return;
 
     if (newMessagesTimerRef.current) clearTimeout(newMessagesTimerRef.current);
-    setNewMessagesSeparator({ firstMessageId: incoming[0].id, count: incoming.length });
-    // Keep the marker for two minutes from when the recipient opens the missed messages.
-    newMessagesTimerRef.current = setTimeout(() => {
-      setNewMessagesSeparator(null);
-      newMessagesTimerRef.current = null;
-    }, 120_000);
+    setNewMessagesSeparator({ firstMessageId: incoming[0].id, count: incoming.length, messageIds: incoming.map((message: any) => message.id) });
   }, [meId]);
 
   useEffect(() => () => {
@@ -410,13 +405,12 @@ function ChatPage() {
             });
             await writeCachedMessages(meId, conversationId, loaded).catch(() => {});
             const cachedIds = new Set(cached.map((message: any) => message.id));
-            const unreadIncoming = page.messages.filter((message: any) =>
+            const newlyArrived = page.messages.filter((message: any) =>
               !cachedIds.has(message.id) &&
               message.sender_id !== meId &&
-              message.message_type !== "system" &&
-              !hasSeenReceipt(message)
+              message.message_type !== "system"
             );
-            showNewMessagesSeparator(unreadIncoming);
+            showNewMessagesSeparator(newlyArrived);
           }
           return;
         }
@@ -810,15 +804,6 @@ function ChatPage() {
             }
           }
 
-          // If the recipient replies, remove the missed-message marker immediately.
-          if (msg.sender_id === meId) {
-            setNewMessagesSeparator(null);
-            if (newMessagesTimerRef.current) {
-              clearTimeout(newMessagesTimerRef.current);
-              newMessagesTimerRef.current = null;
-            }
-          }
-
           // Apply the database INSERT to React Query immediately. Keep this
           // callback synchronous and lightweight so React can paint the row on
           // the next frame instead of waiting for any unrelated async work.
@@ -1042,16 +1027,24 @@ function ChatPage() {
 
   const markSeenNow = useCallback(async () => {
     if (!conversationId || !msgs.data?.length || isLocked || isHiddenLocked) return;
-    const unread = msgs.data.filter((msg: any) => msg.sender_id !== meId && !hasSeenReceipt(msg));
-    if (!unread.length) return;
+    const pane = scrollRef.current;
+    if (!pane) return;
+    const paneRect = pane.getBoundingClientRect();
+    const visibleUnread = msgs.data.filter((msg: any) => {
+      if (msg.sender_id === meId || hasSeenReceipt(msg)) return false;
+      const node = pane.querySelector(`[data-msg-id="${msg.id}"]`) as HTMLElement | null;
+      if (!node) return false;
+      const rect = node.getBoundingClientRect();
+      return rect.bottom > paneRect.top && rect.top < paneRect.bottom;
+    });
+    if (!visibleUnread.length) return;
 
+    const visibleIds = new Set(visibleUnread.map((msg: any) => msg.id));
     const nowString = new Date().toISOString();
     queryClient.setQueryData(["messages", conversationId], (old: any) => {
       if (!Array.isArray(old)) return old;
       return old.map((message: any) => {
-        if (message.sender_id === meId) return message;
-        const hasReceipt = Boolean(message.seen_at || message.read_at || message.first_read_at || message.viewed_at);
-        if (hasReceipt) return message;
+        if (!visibleIds.has(message.id) || message.sender_id === meId || hasSeenReceipt(message)) return message;
         return {
           ...message,
           seen_at: nowString,
@@ -1063,9 +1056,20 @@ function ChatPage() {
     });
 
     try {
-      await mark({ data: { conversationId } });
+      await mark({ data: { conversationId, messageIds: visibleUnread.map((msg: any) => msg.id) } });
     } catch { }
   }, [conversationId, msgs.data, isLocked, isHiddenLocked, meId, queryClient, hasSeenReceipt, mark]);
+
+  // Keep the new-message divider until every message in that batch has a read receipt.
+  useEffect(() => {
+    if (!newMessagesSeparator || !msgs.data) return;
+    const byId = new Map(msgs.data.map((message: any) => [message.id, message]));
+    const allSeen = newMessagesSeparator.messageIds.every((id) => {
+      const message = byId.get(id) as any;
+      return !message || hasSeenReceipt(message);
+    });
+    if (allSeen) setNewMessagesSeparator(null);
+  }, [hasSeenReceipt, msgs.data, newMessagesSeparator]);
 
   // Mark messages as seen immediately while the active chat is visible.
   // This must happen on route entry and on focus/visibility changes, not only after a refresh cycle.
@@ -1345,16 +1349,8 @@ function ChatPage() {
         }
       }
 
-      if (firstUnreadMessage) {
-        const targetId = firstUnreadMessage.id;
-        const msgEl = el.querySelector(`[data-msg-id="${targetId}"]`) as HTMLElement | null;
-        if (msgEl) {
-          el.scrollTo({ top: msgEl.offsetTop - 24, behavior: "auto" });
-          return;
-        }
-      }
-
-      // If there are no unread messages, enter on the latest message.
+      // Without newly arrived messages, enter at the latest message. Older unread
+      // receipts must not pull the user away from the end of the conversation.
       el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
       return;
     }
@@ -1491,16 +1487,6 @@ function ChatPage() {
           return current === next ? current : next;
         });
         isNearBottomRef.current = isAtBottom;
-
-        // Once the recipient reaches the latest message, the missed-message
-        // divider has served its purpose and should disappear immediately.
-        if (isAtBottom && newMessagesSeparator) {
-          setNewMessagesSeparator(null);
-          if (newMessagesTimerRef.current) {
-            clearTimeout(newMessagesTimerRef.current);
-            newMessagesTimerRef.current = null;
-          }
-        }
 
         // Detect intentional upward scroll
         if (scrollTop < lastScrollTopRef.current && !isAnimatingScrollRef.current) {
