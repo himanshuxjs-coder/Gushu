@@ -130,7 +130,6 @@ function ChatPage() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [refreshingOnEntry, setRefreshingOnEntry] = useState(true);
   const [newMessagesSeparator, setNewMessagesSeparator] = useState<{ firstMessageId: string; count: number; messageIds: string[] } | null>(null);
-  const newMessagesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Share one incremental catch-up between chat entry and Realtime subscription recovery.
   const syncNewMessagesRef = useRef<(() => void) | null>(null);
   const messageSyncInFlightRef = useRef(false);
@@ -221,13 +220,8 @@ function ChatPage() {
     // marker based on potentially stale remote-presence information.
     if (!incoming.length) return;
 
-    if (newMessagesTimerRef.current) clearTimeout(newMessagesTimerRef.current);
     setNewMessagesSeparator({ firstMessageId: incoming[0].id, count: incoming.length, messageIds: incoming.map((message: any) => message.id) });
   }, [meId]);
-
-  useEffect(() => () => {
-    if (newMessagesTimerRef.current) clearTimeout(newMessagesTimerRef.current);
-  }, []);
 
   useEffect(() => {
     if (!settings?.is_locked || !settings.pin_hash || typeof window === "undefined") return;
@@ -1335,7 +1329,6 @@ function ChatPage() {
     const messageCountChanged = visible.length !== previousMessageCountRef.current;
     previousMessageCountRef.current = visible.length;
     const latestMessage = visible[visible.length - 1];
-    const firstUnreadIndex = visible.findIndex((m: any) => m.sender_id !== meId && !hasSeenReceipt(m));
 
     if (!initialScrollDoneRef.current) {
       initialScrollDoneRef.current = true;
@@ -1364,7 +1357,7 @@ function ChatPage() {
     if ((isNearBottom || shouldFollowNewMessage) && !userScrolledUpRef.current) {
       requestAnimationFrame(() => animateScrollToBottom());
     }
-  }, [animateScrollToBottom, firstUnreadMessage, meId, newMessagesSeparator, visibleMessages]);
+  }, [animateScrollToBottom, meId, newMessagesSeparator, visibleMessages]);
 
   // When catch-up discovers missed messages after the initial render, jump to
   // the oldest one instead of leaving the recipient at the bottom of the chat.
