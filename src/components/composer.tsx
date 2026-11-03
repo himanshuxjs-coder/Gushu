@@ -91,6 +91,8 @@ export function Composer({
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentRef = useRef<number>(0);
   const draftChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const draftSequenceRef = useRef(0);
+  const lastDraftSequenceRef = useRef(new Map<string, number>());
   const draftDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const draftAnimationFrameRef = useRef<number | null>(null);
   const textareaResizeFrameRef = useRef<number | null>(null);
