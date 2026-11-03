@@ -125,8 +125,7 @@ function ChatPage() {
   const previousMessageCountRef = useRef(0);
   const loadingOlderRef = useRef(false);
   const preserveScrollRef = useRef<{ height: number; top: number } | null>(null);
-  const historyBackfilledRef = useRef(false);
-  const [visibleMessageLimit, setVisibleMessageLimit] = useState(MESSAGE_PAGE_SIZE);
+  const [visibleMessageLimit, setVisibleMessageLimit] = useState(Number.MAX_SAFE_INTEGER);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [refreshingOnEntry, setRefreshingOnEntry] = useState(true);
   const [newMessagesSeparator, setNewMessagesSeparator] = useState<{ firstMessageId: string; count: number; messageIds: string[] } | null>(null);
@@ -283,18 +282,29 @@ function ChatPage() {
     queryKey: ["messages", conversationId],
     queryFn: async () => {
       try {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayStartIso = todayStart.toISOString();
+
         if (!navigator.onLine) {
           const cached = await readCachedMessages(meId, conversationId);
           if (cached) {
+            const todayCached = cached.filter((message: any) => new Date(message.created_at).getTime() >= todayStart.getTime());
             queryClient.setQueryData(["messages-pagination", conversationId], {
-              hasMoreOlder: cached.length > 0,
-              beforeCreatedAt: cached[0]?.created_at ?? null,
-              beforeId: cached[0]?.id ?? null,
+              hasMoreOlder: true,
+              beforeCreatedAt: todayStartIso,
+              beforeId: null,
             });
-            return cached;
+            return todayCached;
           }
         }
-        const previous = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
+        const cachedPrevious = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
+        // Keep initial history focused on today. Older messages are fetched only
+        // when the user explicitly clicks Load earlier messages.
+        const previous = cachedPrevious.filter((message: any) =>
+          new Date(message.created_at).getTime() >= todayStart.getTime() ||
+          message.is_optimistic || message.send_failed
+        );
         // Pending/failed local messages can have newer local timestamps than the
         // server timeline. Never use them as a server catch-up cursor or older
         // incoming messages can be skipped after reconnect.
@@ -303,7 +313,9 @@ function ChatPage() {
         );
         const latestConfirmed = confirmedPrevious[confirmedPrevious.length - 1];
         const isIncremental = Boolean(latestConfirmed);
-        let cursor = isIncremental ? latestConfirmed?.created_at : undefined;
+        // On first entry, start at local midnight and fetch every message today.
+        // Subsequent refetches fetch only rows newer than the newest cached row.
+        let cursor = isIncremental ? latestConfirmed?.created_at : todayStartIso;
         let cursorId = isIncremental ? latestConfirmed?.id : undefined;
         let incoming: any[] = [];
         let page: any;
@@ -319,7 +331,7 @@ function ChatPage() {
             },
           });
           incoming = incoming.concat(page.messages);
-          if (isIncremental && page.hasMoreOlder && page.nextAfterCreatedAt && page.nextAfterId) {
+          if (page.hasMoreOlder && page.nextAfterCreatedAt && page.nextAfterId) {
             cursor = page.nextAfterCreatedAt;
             cursorId = page.nextAfterId;
           } else {
@@ -329,10 +341,12 @@ function ChatPage() {
 
         const merged = mergeMessages(previous, incoming);
         if (!isIncremental) {
+          // Do not fetch yesterday/older during chat entry. The first click
+          // starts immediately before today's midnight boundary.
           queryClient.setQueryData(["messages-pagination", conversationId], {
-            hasMoreOlder: page.hasMoreOlder,
-            beforeCreatedAt: page.nextBeforeCreatedAt,
-            beforeId: page.nextBeforeId,
+            hasMoreOlder: true,
+            beforeCreatedAt: todayStartIso,
+            beforeId: null,
           });
         }
         await writeCachedMessages(meId, conversationId, merged).catch(() => {});
@@ -566,59 +580,10 @@ function ChatPage() {
     preserveScrollRef.current = { height: element.scrollHeight, top: element.scrollTop };
 
     try {
-      let justBackfilledHistory = false;
-      // Local caches can contain the newest and oldest messages but miss rows
-      // in between. On the first request, reconcile the last 5 days from the
-      // server in stable chronological batches before revealing another page.
-      if (!historyBackfilledRef.current && navigator.onLine) {
-        const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
-        let cursor: string | undefined = cutoff;
-        let cursorId: string | undefined;
-        const backfilled: any[] = [];
-
-        while (cursor) {
-          const page = await listMsgs({
-            data: {
-              conversationId,
-              afterCreatedAt: cursor,
-              ...(cursorId ? { afterId: cursorId } : {}),
-              limit: MESSAGE_PAGE_SIZE,
-            },
-          });
-          backfilled.push(...page.messages);
-          if (page.hasMoreOlder && page.nextAfterCreatedAt && page.nextAfterId) {
-            cursor = page.nextAfterCreatedAt;
-            cursorId = page.nextAfterId;
-          } else {
-            cursor = undefined;
-          }
-        }
-
-        const latestCurrent = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
-        const reconciled = mergeMessages(latestCurrent, backfilled);
-        queryClient.setQueryData(["messages", conversationId], reconciled);
-        await writeCachedMessages(meId, conversationId, reconciled).catch(() => {});
-        const earliest = reconciled[0];
-        queryClient.setQueryData(["messages-pagination", conversationId], {
-          // The next older-page request will confirm whether anything predates
-          // this cursor. This is deliberately optimistic to recover stale caches.
-          hasMoreOlder: Boolean(earliest),
-          beforeCreatedAt: earliest?.created_at ?? null,
-          beforeId: earliest?.id ?? null,
-        });
-        historyBackfilledRef.current = true;
-        justBackfilledHistory = true;
-      }
-
       const current = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
-      if (visibleMessageLimit < current.length) {
-        setVisibleMessageLimit((limit) => limit + OLDER_MESSAGES_PAGE_SIZE);
-        return;
-      }
-
-      const beforeCreatedAt = pagination.data?.beforeCreatedAt ?? current[0]?.created_at;
-      const beforeId = pagination.data?.beforeId ?? current[0]?.id;
-      if (!beforeCreatedAt || (!pagination.data?.hasMoreOlder && !justBackfilledHistory)) {
+      const beforeCreatedAt = pagination.data?.beforeCreatedAt;
+      const beforeId = pagination.data?.beforeId ?? undefined;
+      if (!beforeCreatedAt || !pagination.data?.hasMoreOlder) {
         preserveScrollRef.current = null;
         return;
       }
@@ -664,13 +629,12 @@ function ChatPage() {
       loadingOlderRef.current = false;
       setLoadingOlder(false);
     }
-  }, [conversationId, historyBackfilledRef, listMsgs, meId, pagination.data, queryClient, visibleMessageLimit]);
+  }, [conversationId, listMsgs, meId, pagination.data, queryClient, visibleMessageLimit]);
 
   useEffect(() => {
-    setVisibleMessageLimit(MESSAGE_PAGE_SIZE);
+    setVisibleMessageLimit(Number.MAX_SAFE_INTEGER);
     loadingOlderRef.current = false;
     preserveScrollRef.current = null;
-    historyBackfilledRef.current = false;
     initialScrollDoneRef.current = false;
   }, [conversationId]);
 
