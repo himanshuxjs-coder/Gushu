@@ -67,7 +67,7 @@ export function mergeMessages(existing: any[], incoming: any[]): any[] {
   result.sort((a, b) => {
     const ta = new Date(a.created_at).getTime();
     const tb = new Date(b.created_at).getTime();
-    return ta - tb;
+    return ta - tb || String(a.id).localeCompare(String(b.id));
   });
   return result;
 }
@@ -127,6 +127,9 @@ export function mergeRealtimeMessage(existing: any[], msg: any): any[] {
 
   // Append new message, keep sorted
   const result = [...list, { ...msg, is_optimistic: false }];
-  result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  result.sort((a, b) => {
+    const timeDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    return timeDiff || String(a.id).localeCompare(String(b.id));
+  });
   return result;
 }
