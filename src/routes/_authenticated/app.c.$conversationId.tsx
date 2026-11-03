@@ -395,29 +395,9 @@ function ChatPage() {
           (message: any) => !message.is_optimistic && !message.send_failed,
         );
         if (confirmedCached.length === 0) {
-          // Fetch the latest server page when there is no confirmed server
-          // cursor yet. Merge it with local pending messages instead of replacing
-          // the cache, so offline sends remain visible and queued.
-          const page = await listMsgs({
-            data: { conversationId, limit: MESSAGE_PAGE_SIZE },
-          });
-          const loaded = mergeMessages(cached, page.messages);
-          if (!cancelled) {
-            queryClient.setQueryData(["messages", conversationId], loaded);
-            queryClient.setQueryData(["messages-pagination", conversationId], {
-              hasMoreOlder: page.hasMoreOlder,
-              beforeCreatedAt: page.nextBeforeCreatedAt,
-              beforeId: page.nextBeforeId,
-            });
-            await writeCachedMessages(meId, conversationId, loaded).catch(() => {});
-            const cachedIds = new Set(cached.map((message: any) => message.id));
-            const newlyArrived = page.messages.filter((message: any) =>
-              !cachedIds.has(message.id) &&
-              message.sender_id !== meId &&
-              message.message_type !== "system"
-            );
-            showNewMessagesSeparator(newlyArrived);
-          }
+          // The primary messages query is responsible for loading the complete
+          // current day from midnight. Do not fetch a latest-page fallback here:
+          // it could overwrite the midnight cursor and omit earlier messages today.
           return;
         }
 
