@@ -305,20 +305,15 @@ function ChatPage() {
           new Date(message.created_at).getTime() >= todayStart.getTime() ||
           message.is_optimistic || message.send_failed
         );
-        // Pending/failed local messages can have newer local timestamps than the
-        // server timeline. Never use them as a server catch-up cursor or older
-        // incoming messages can be skipped after reconnect.
         // Always reconcile the full current day from local midnight. A cache
         // may contain only the latest 100 messages, which is not enough when
         // a busy conversation has more messages today.
-        const isIncremental = false;
         let cursor: string | undefined = todayStartIso;
         let cursorId: string | undefined = undefined;
         let incoming: any[] = [];
         let page: any;
 
-        // Initial load gets the latest page. Subsequent catch-ups fetch only rows newer
-        // than the newest cached message, in small batches, until fully caught up.
+        // Fetch every page from local midnight through the latest message today.
         do {
           page = await listMsgs({
             data: {
@@ -337,15 +332,13 @@ function ChatPage() {
         } while (true);
 
         const merged = mergeMessages(previous, incoming);
-        if (!isIncremental) {
-          // Do not fetch yesterday/older during chat entry. The first click
-          // starts immediately before today's midnight boundary.
-          queryClient.setQueryData(["messages-pagination", conversationId], {
-            hasMoreOlder: true,
-            beforeCreatedAt: todayStartIso,
-            beforeId: null,
-          });
-        }
+        // Do not fetch yesterday/older during chat entry. The first click
+        // starts immediately before today's midnight boundary.
+        queryClient.setQueryData(["messages-pagination", conversationId], {
+          hasMoreOlder: true,
+          beforeCreatedAt: todayStartIso,
+          beforeId: null,
+        });
         await writeCachedMessages(meId, conversationId, merged).catch(() => {});
         return merged;
       } catch (error) {
@@ -598,7 +591,7 @@ function ChatPage() {
         beforeCreatedAt: page.nextBeforeCreatedAt,
         beforeId: page.nextBeforeId,
       });
-      setVisibleMessageLimit((limit) => limit + MESSAGE_PAGE_SIZE);
+      setVisibleMessageLimit((limit) => limit + OLDER_MESSAGES_PAGE_SIZE);
     } catch (error) {
       preserveScrollRef.current = null;
       console.error("[Gushu] Could not reconcile chat history", error);
