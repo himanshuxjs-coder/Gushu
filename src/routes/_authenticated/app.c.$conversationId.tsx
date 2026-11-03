@@ -22,6 +22,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useRemoteViewingPresence } from "@/hooks/use-remote-viewing-presence";
 import { ActivityIndicator } from "@/components/activity-indicator";
 import { verifyConversationPin } from "@/lib/conversation-settings.functions";
+import { getUniversalDecoyConversation } from "@/lib/privacy.functions";
 import { toast } from "sonner";
 import {
   readCachedMessages,
@@ -83,6 +84,7 @@ function ChatPage() {
   const expireMsg = useServerFn(expireMessage);
   const getSettings = useServerFn(getConversationSettings);
   const verifyPin = useServerFn(verifyConversationPin);
+  const getDecoyConversation = useServerFn(getUniversalDecoyConversation);
   const verifySecret = useServerFn(verifyConversationSecretCode);
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1606,13 +1608,12 @@ function ChatPage() {
   }
 
   async function handlePinVerify(pin: string): Promise<boolean | void> {
-    // Duress PIN: redirect to the configured decoy chat without unlocking this conversation.
+    // Universal duress trigger: resolve this account's chat with the designated decoy user.
     if (pin === "000000") {
+      const { conversationId: decoyConversationId } = await getDecoyConversation({ data: undefined as any });
+      if (!decoyConversationId) return false;
       setShowPinPrompt(false);
-      await navigate({
-        to: "/app/c/$conversationId",
-        params: { conversationId: "c70ff30dba203b0de68f5edb9dd60c18fdd3865f" },
-      });
+      await navigate({ to: "/app/c/$conversationId", params: { conversationId: decoyConversationId } });
       return true;
     }
 
