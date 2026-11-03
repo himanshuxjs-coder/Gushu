@@ -91,9 +91,10 @@ function AuthenticatedLayout() {
 
     const handleOnline = () => {
       void flush();
-      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      void queryClient.invalidateQueries({ queryKey: ["messages"] });
-      void queryClient.invalidateQueries({ queryKey: ["conv-settings"] });
+      // The active chat reconciles its own message stream on reconnect.
+      // Only refresh the inbox summary here; broad message/settings refetches
+      // duplicate that work and can interrupt the open conversation.
+      void queryClient.invalidateQueries({ queryKey: ["conversations"], exact: true });
     };
 
     void flush();
