@@ -493,35 +493,18 @@ function ChatPage() {
     };
   }, [conversationId, hasSeenReceipt, listMsgs, location.pathname, meId, queryClient, showNewMessagesSeparator]);
 
-  // Fetch only missed messages when the app returns or connectivity is restored.
-  // No timer/polling: normal incoming messages are inserted by the Realtime callback.
+  // On bfcache restoration, reconcile through the same incremental cursor
+  // path used by Realtime reconnects. Focus/online are already handled by the
+  // dedicated visible-chat effect, so don't launch a second full query refetch.
   useEffect(() => {
-    let syncTimer: ReturnType<typeof setTimeout> | null = null;
-    const syncMessagesOnReturn = () => {
-      if (document.visibilityState !== "visible") return;
-      if (syncTimer) clearTimeout(syncTimer);
-      syncTimer = setTimeout(() => {
-        void queryClient.invalidateQueries({
-          queryKey: ["messages", conversationId],
-          exact: true,
-          refetchType: "active",
-        });
-      }, 150);
-    };
     const handlePageShow = (event: PageTransitionEvent) => {
-      if (event.persisted) syncMessagesOnReturn();
+      if (event.persisted && document.visibilityState === "visible") {
+        syncNewMessagesRef.current?.();
+      }
     };
-
-    document.addEventListener("visibilitychange", syncMessagesOnReturn);
     window.addEventListener("pageshow", handlePageShow);
-    window.addEventListener("online", syncMessagesOnReturn);
-    return () => {
-      if (syncTimer) clearTimeout(syncTimer);
-      document.removeEventListener("visibilitychange", syncMessagesOnReturn);
-      window.removeEventListener("pageshow", handlePageShow);
-      window.removeEventListener("online", syncMessagesOnReturn);
-    };
-  }, [conversationId, queryClient]);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
 
   const pagination = useQuery({
     queryKey: ["messages-pagination", conversationId],
