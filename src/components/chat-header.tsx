@@ -346,31 +346,25 @@ export function ChatHeader({
             </div>
 
             <div className="flex shrink-0 items-center">
-              {shouldMaskOther ? (
-                <div className="grid h-9 w-9 place-items-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
-                  <Lock className="size-4" />
-                </div>
-              ) : (
-                <button
-                  onClick={openProfile}
-                  className="shrink-0 cursor-pointer transition-all duration-300 hover:scale-105"
-                  aria-label="View profile"
-                >
-                  <Avatar
-                    name={other.display_name ?? other.username}
-                    url={other.avatar_url}
-                    size={36}
-                    className={cn(
-                      "size-9 shrink-0 transition-all duration-500",
-                      isTyping
-                        ? "ring-2 ring-primary shadow-[0_0_25px_rgba(139,92,246,0.8)] animate-pulse"
-                        : isOnline(other.last_seen_at)
-                          ? "ring-2 ring-primary/40 shadow-[0_0_15px_rgba(139,92,246,0.4)]"
-                          : "ring-1 ring-white/10 shadow-[0_0_10px_rgba(255,255,255,0.05)]"
-                    )}
-                  />
-                </button>
-              )}
+              <button
+                onClick={openProfile}
+                className="shrink-0 cursor-pointer transition-all duration-300 hover:scale-105"
+                aria-label="View profile"
+              >
+                <Avatar
+                  name={other.display_name ?? other.username}
+                  url={other.avatar_url}
+                  size={36}
+                  className={cn(
+                    "size-9 shrink-0 transition-all duration-500",
+                    isTyping
+                      ? "ring-2 ring-primary shadow-[0_0_25px_rgba(139,92,246,0.8)] animate-pulse"
+                      : isOnline(other.last_seen_at)
+                        ? "ring-2 ring-primary/40 shadow-[0_0_15px_rgba(139,92,246,0.4)]"
+                        : "ring-1 ring-white/10 shadow-[0_0_10px_rgba(255,255,255,0.05)]"
+                  )}
+                />
+              </button>
             </div>
 
             <div className="min-w-0">
@@ -390,9 +384,7 @@ export function ChatHeader({
                 )}
               </div>
               <p className="text-[11px] text-muted-foreground transition-all duration-300 opacity-100 h-auto">
-                {shouldMaskOther ? (
-                  <span className="text-xs text-muted-foreground">Hidden conversation</span>
-                ) : isTyping ? (
+                {isTyping ? (
                   <TypingIndicator className="inline-flex" />
                 ) : isOtherOnline ? (
                   <span className="inline-flex items-center gap-1.5">
