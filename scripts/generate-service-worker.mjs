@@ -14,15 +14,6 @@ const result = await generateSW({
   maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
   runtimeCaching: [
     {
-      urlPattern: ({ request }) => request.mode === "navigate",
-      handler: "NetworkFirst",
-      options: {
-        cacheName: "gushu-app-pages",
-        networkTimeoutSeconds: 1,
-        expiration: { maxEntries: 20 },
-      },
-    },
-    {
       urlPattern: ({ url, request }) =>
         url.origin === self.location.origin &&
         ["script", "style", "font", "image"].includes(request.destination),
