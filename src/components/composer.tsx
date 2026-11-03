@@ -92,7 +92,7 @@ export function Composer({
   const lastTypingSentRef = useRef<number>(0);
   const draftChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const draftSequenceRef = useRef(0);
-  const draftSessionIdRef = useRef(`${Date.now()}-${"ktnekcwqogp"}`);
+  const draftSessionIdRef = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const lastDraftSequenceRef = useRef(new Map<string, { sessionId: string; seq: number }>());
   const draftDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const draftAnimationFrameRef = useRef<number | null>(null);
