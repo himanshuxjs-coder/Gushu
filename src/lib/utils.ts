@@ -81,10 +81,16 @@ export function mergeRealtimeMessage(existing: any[], msg: any): any[] {
   if (!msg || !msg.id) return existing ?? [];
 
   const list = existing ?? [];
+  const sortTimeline = (messages: any[]) =>
+    messages.sort((a, b) => {
+      const timeDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return timeDiff || String(a.id).localeCompare(String(b.id));
+    });
 
-  // Already present — update in place
+  // A duplicate Realtime event can carry newer receipt/edit fields. Merge it,
+  // then sort again in case the authoritative timestamp changed.
   if (list.some((item) => item.id === msg.id)) {
-    return list.map((item) =>
+    return sortTimeline(list.map((item) =>
       item.id === msg.id
         ? {
             ...item,
@@ -96,10 +102,11 @@ export function mergeRealtimeMessage(existing: any[], msg: any): any[] {
             is_optimistic: false,
           }
         : item,
-    );
+    ));
   }
 
-  // Try to replace a matching optimistic message
+  // Replace the optimistic row by its permanent id. The database timestamp is
+  // authoritative, so never keep the old optimistic array position.
   const confirmedTs = new Date(msg.created_at).getTime();
   for (let i = 0; i < list.length; i++) {
     const item = list[i];
@@ -110,7 +117,7 @@ export function mergeRealtimeMessage(existing: any[], msg: any): any[] {
       (item.reply_to ?? null) === (msg.reply_to ?? null)
     ) {
       const optTs = new Date(item.created_at).getTime();
-      if (Math.abs(optTs - confirmedTs) < 10000) {
+      if (Math.abs(optTs - confirmedTs) < 10_000) {
         const copy = list.slice();
         copy[i] = {
           ...msg,
@@ -120,16 +127,10 @@ export function mergeRealtimeMessage(existing: any[], msg: any): any[] {
           saved_by_me: msg.saved_by_me ?? item.saved_by_me ?? false,
           replied_message: msg.replied_message ?? item.replied_message ?? null,
         };
-        return copy;
+        return sortTimeline(copy);
       }
     }
   }
 
-  // Append new message, keep sorted
-  const result = [...list, { ...msg, is_optimistic: false }];
-  result.sort((a, b) => {
-    const timeDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    return timeDiff || String(a.id).localeCompare(String(b.id));
-  });
-  return result;
+  return sortTimeline([...list, { ...msg, is_optimistic: false }]);
 }
