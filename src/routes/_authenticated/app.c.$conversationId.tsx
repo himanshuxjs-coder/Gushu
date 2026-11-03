@@ -1731,7 +1731,7 @@ function ChatPage() {
                 type="button"
                 onClick={() => void loadEarlierMessages()}
                 disabled={loadingOlder}
-                className="mx-auto block rounded-full border border-border bg-background/80 px-4 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted disabled:opacity-60"
+                className="sticky top-2 z-20 mx-auto block rounded-full border border-border bg-background/95 px-5 py-2.5 text-xs font-medium text-foreground shadow-md backdrop-blur transition-colors hover:bg-muted disabled:opacity-60"
               >
                 {loadingOlder ? "Loading earlier messages..." : "Load earlier messages"}
               </button>
