@@ -869,18 +869,11 @@ function ChatPage() {
           const msg = payload.new as any;
           if (!msg) return;
 
-          // MERGE: only update the matching message, never replace the array.
-          // Do NOT invalidateQueries — that triggers a refetch that can lose
-          // newer messages and optimistic entries.
+          // Merge without a refetch, and always re-sort because the database
+          // timestamp is authoritative (including when an optimistic row is
+          // replaced or a server-side edit changes ordering fields).
           queryClient.setQueryData(["messages", conversationId], (old: any) => {
             if (!Array.isArray(old)) return old;
-            // If message exists, update in place
-            if (old.some((item: any) => item.id === msg.id)) {
-              return old.map((item: any) =>
-                item.id === msg.id ? { ...item, ...msg } : item,
-              );
-            }
-            // If not found, merge it in (don't refetch)
             return mergeRealtimeMessage(old, msg);
           });
         },
@@ -1138,11 +1131,21 @@ function ChatPage() {
         return;
       }
 
+      // Reconcile this open chat only. The Realtime stream already keeps the
+      // inbox current; refetching every conversation on each focus causes
+      // unnecessary network traffic and visible UI work.
       await Promise.all([
-        queryClient.refetchQueries({ queryKey: ["messages", conversationId] }),
-        queryClient.refetchQueries({ queryKey: ["conversation", conversationId] }),
-        queryClient.refetchQueries({ queryKey: ["conv-settings", conversationId] }),
-        queryClient.refetchQueries({ queryKey: ["conversations"] }),
+        syncNewMessagesRef.current?.(),
+        queryClient.refetchQueries({
+          queryKey: ["conversation", conversationId],
+          exact: true,
+          stale: true,
+        }),
+        queryClient.refetchQueries({
+          queryKey: ["conv-settings", conversationId],
+          exact: true,
+          stale: true,
+        }),
       ]);
 
       if (msgs.data?.length) {
