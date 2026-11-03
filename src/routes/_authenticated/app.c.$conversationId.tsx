@@ -52,6 +52,7 @@ const WALLPAPER_STYLE: Record<string, string> = {
 };
 
 const MESSAGE_PAGE_SIZE = 100;
+const OLDER_MESSAGES_PAGE_SIZE = 70;
 
 function withTimeout<T>(task: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
@@ -623,7 +624,7 @@ function ChatPage() {
 
       const current = queryClient.getQueryData<any[]>(["messages", conversationId]) ?? [];
       if (visibleMessageLimit < current.length) {
-        setVisibleMessageLimit((limit) => limit + MESSAGE_PAGE_SIZE);
+        setVisibleMessageLimit((limit) => limit + OLDER_MESSAGES_PAGE_SIZE);
         return;
       }
 
@@ -639,7 +640,7 @@ function ChatPage() {
           conversationId,
           beforeCreatedAt,
           ...(beforeId ? { beforeId } : {}),
-          limit: MESSAGE_PAGE_SIZE,
+          limit: OLDER_MESSAGES_PAGE_SIZE,
         },
       });
 
