@@ -140,6 +140,8 @@ function RootShell({ children }: { children: ReactNode }) {
             background: linear-gradient(135deg, #a855f7, #3b82f6);
             animation: gushu-boot-progress 1.25s ease-in-out infinite;
           }
+          #gushu-boot-recovery { display: none; max-width: 280px; text-align: center; font: 13px/1.5 system-ui, sans-serif; color: #c8c4d8; }
+          #gushu-boot-recovery button { margin-top: 12px; border: 1px solid rgba(255,255,255,.24); border-radius: 8px; padding: 9px 16px; color: white; background: rgba(255,255,255,.08); }
           @keyframes gushu-boot-progress {
             from { transform: translateX(-110%); }
             to { transform: translateX(290%); }
@@ -182,7 +184,12 @@ function RootShell({ children }: { children: ReactNode }) {
             style={{ display: "block", width: 80, height: 80, objectFit: "contain" }} />
           <span style={{ fontFamily: "Georgia, serif", fontSize: 28, letterSpacing: "-0.04em" }}>Gushu</span>
           <div id="gushu-boot-progress" aria-hidden="true" />
+          <div id="gushu-boot-recovery">
+            Gushu is taking longer than expected to start. Check your connection and reload the app.
+            <br /><button type="button" onclick="window.location.reload()">Reload app</button>
+          </div>
         </div>
+        <script dangerouslySetInnerHTML={{ __html: `window.setTimeout(function(){if(!document.documentElement.classList.contains('gushu-app-ready')){var recovery=document.getElementById('gushu-boot-recovery');var progress=document.getElementById('gushu-boot-progress');if(recovery)recovery.style.display='block';if(progress)progress.style.display='none';}},10000);` }} />
         {children}
         <Scripts />
       </body>
@@ -208,40 +215,56 @@ function RootComponent() {
   }, [router, queryClient]);
 
   useEffect(() => {
-    const refreshAppOnResume = async () => {
-      if (document.visibilityState !== "visible") return;
+    let wasHidden = document.visibilityState === "hidden";
+    let wasOffline = !navigator.onLine;
+    let lastRefreshAt = 0;
 
-      void router.invalidate();
+    const refreshAppOnResume = () => {
+      const now = Date.now();
+      if (document.visibilityState !== "visible" || now - lastRefreshAt < 2000) return;
+      lastRefreshAt = now;
+
+      // Invalidate once. TanStack Query refetches active queries automatically;
+      // explicitly refetching them again caused duplicate startup/resume requests.
       void queryClient.invalidateQueries({ queryKey: ["conversations"] });
       void queryClient.invalidateQueries({ queryKey: ["messages"] });
       void queryClient.invalidateQueries({ queryKey: ["conv-settings"] });
       void queryClient.invalidateQueries({ queryKey: ["me"] });
-      void queryClient.invalidateQueries({ type: "active" });
-
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: ["conversations"] }),
-        queryClient.refetchQueries({ queryKey: ["messages"] }),
-        queryClient.refetchQueries({ queryKey: ["conv-settings"] }),
-        queryClient.refetchQueries({ queryKey: ["me"] }),
-      ]);
     };
 
-    document.addEventListener("visibilitychange", refreshAppOnResume);
-    window.addEventListener("focus", refreshAppOnResume);
-    window.addEventListener("online", refreshAppOnResume);
+    const handleVisibilityChange = () => {
+      const becameVisible = wasHidden && document.visibilityState === "visible";
+      wasHidden = document.visibilityState === "hidden";
+      if (becameVisible) refreshAppOnResume();
+    };
+
+    const handleOnline = () => {
+      const cameOnline = wasOffline && navigator.onLine;
+      wasOffline = !navigator.onLine;
+      if (cameOnline) refreshAppOnResume();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", handleOnline);
 
     return () => {
-      document.removeEventListener("visibilitychange", refreshAppOnResume);
-      window.removeEventListener("focus", refreshAppOnResume);
-      window.removeEventListener("online", refreshAppOnResume);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", handleOnline);
     };
-  }, [queryClient, router]);
+  }, [queryClient]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-    void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((error) => {
-      console.warn("Offline app shell could not be installed:", error);
-    });
+    void navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" })
+      .then((registration) => {
+        // Refresh the worker promptly and remove the old cached HTML shell,
+        // which could reference JavaScript chunks from a previous deployment.
+        void registration.update();
+        if ("caches" in window) void caches.delete("gushu-app-pages");
+      })
+      .catch((error) => {
+        console.warn("Offline app shell could not be installed:", error);
+      });
   }, []);
 
   return (
