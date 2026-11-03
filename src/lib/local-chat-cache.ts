@@ -26,7 +26,6 @@ export type PendingTextMessage = {
     content: string;
     reply_to: string | null;
     message_type: "text";
-    created_at: string;
   };
   localMessage: LocalChatMessage;
   queuedAt: number;
@@ -136,9 +135,10 @@ export async function readCachedMessages(
       for (const pending of pendingMessages) {
         messages.set(pending.id, pending.localMessage);
       }
-      const result = Array.from(messages.values()).sort(
-        (left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
-      );
+      const result = Array.from(messages.values()).sort((left, right) => {
+        const timeDiff = new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+        return timeDiff || String(left.id).localeCompare(String(right.id));
+      });
       resolve(result.length ? result : cachedRecord ? [] : null);
     };
     transaction.onerror = () => reject(transaction.error ?? new Error("Could not read local chat"));
