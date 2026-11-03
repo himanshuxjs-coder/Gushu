@@ -300,7 +300,8 @@ export function ChatHeader({
   }, []);
 
   const isHidden = !!settings?.is_hidden;
-  const shouldMaskOther = isHiddenLocked;
+  // Keep the other participant's name and username private until this chat's PIN is verified.
+  const shouldMaskOther = !!isHiddenLocked || (!!settings?.is_locked && !!settings?.pin_hash && !isUnlocked);
 
   return (
     <>
@@ -375,7 +376,7 @@ export function ChatHeader({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
                 <h2 className="truncate font-display text-base tracking-tight text-foreground sm:text-xl group-hover:text-primary transition-colors">
-                  {shouldMaskOther ? "User xyz" : other.display_name ?? other.username}
+                  {shouldMaskOther ? "xyz" : other.display_name ?? other.username}
                 </h2>
                 {!shouldMaskOther && other.verified && <VerifiedBadge size={14} />}
                 {settings?.pin_hash && (
