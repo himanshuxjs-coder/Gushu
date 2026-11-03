@@ -54,10 +54,19 @@ function AuthenticatedLayout() {
           const updated = queryClient.setQueryData<LocalChatMessage[]>(queryKey, (current) => {
             const list = current ?? [];
             const index = list.findIndex((item) => item.id === message.id);
-            if (index < 0) return [...list, { ...message, is_optimistic: false }];
-            return list.map((item) => item.id === message.id
-              ? { ...item, ...message, is_optimistic: false, send_failed: false }
-              : item);
+            const merged = index < 0
+              ? [...list, { ...message, is_optimistic: false }]
+              : list.map((item) => item.id === message.id
+                ? { ...item, ...message, is_optimistic: false, send_failed: false }
+                : item);
+
+            // Offline messages receive their authoritative database timestamp
+            // only when they flush. Re-sort after replacing the local timestamp,
+            // otherwise a delayed outbox message can remain above newer messages.
+            return merged.sort((a, b) => {
+              const timeDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+              return timeDiff || String(a.id).localeCompare(String(b.id));
+            });
           });
           if (Array.isArray(updated)) {
             void writeCachedMessages(user.id, message.conversation_id, updated).catch(() => {});
