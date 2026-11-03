@@ -390,6 +390,25 @@ export function Composer({
           ? { userId: meId, text: currentText, seq, sessionId: draftSessionIdRef.current }
           : { userId: meId, seq, sessionId: draftSessionIdRef.current },
       }).catch(() => {});
+
+      // Repeat the newest complete value after a short quiet period. This
+      // repairs a dropped/throttled keystroke packet without delaying live input.
+      if (draftDebounceRef.current) clearTimeout(draftDebounceRef.current);
+      draftDebounceRef.current = setTimeout(() => {
+        draftDebounceRef.current = null;
+        const channel = draftChannelRef.current;
+        if (!channel) return;
+        const latestText = latestDraftTextRef.current;
+        const latestHasText = latestText.length > 0;
+        const latestSeq = ++draftSequenceRef.current;
+        void channel.send({
+          type: "broadcast",
+          event: latestHasText ? "draft" : "draft-clear",
+          payload: latestHasText
+            ? { userId: meId, text: latestText, seq: latestSeq, sessionId: draftSessionIdRef.current }
+            : { userId: meId, seq: latestSeq, sessionId: draftSessionIdRef.current },
+        }).catch(() => {});
+      }, 120);
     },
     [draftPreviewEnabled, meId],
   );
