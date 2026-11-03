@@ -92,7 +92,8 @@ export function Composer({
   const lastTypingSentRef = useRef<number>(0);
   const draftChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const draftSequenceRef = useRef(0);
-  const lastDraftSequenceRef = useRef(new Map<string, number>());
+  const draftSessionIdRef = useRef(`${Date.now()}-${"ktnekcwqogp"}`);
+  const lastDraftSequenceRef = useRef(new Map<string, { sessionId: string; seq: number }>());
   const draftDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const draftAnimationFrameRef = useRef<number | null>(null);
   const textareaResizeFrameRef = useRef<number | null>(null);
@@ -259,19 +260,21 @@ export function Composer({
     });
     draftChannel
       .on("broadcast", { event: "draft" }, (payload) => {
-        const data = payload.payload as { userId: string; text: string; seq?: number } | null;
+        const data = payload.payload as { userId: string; text: string; seq?: number; sessionId?: string } | null;
         if (!data || data.userId === meId) return;
-        const previousSeq = lastDraftSequenceRef.current.get(data.userId) ?? -1;
-        if (typeof data.seq === "number" && data.seq <= previousSeq) return;
-        if (typeof data.seq === "number") lastDraftSequenceRef.current.set(data.userId, data.seq);
+        const sessionId = data.sessionId ?? "legacy";
+        const previous = lastDraftSequenceRef.current.get(data.userId);
+        if (previous?.sessionId === sessionId && typeof data.seq === "number" && data.seq <= previous.seq) return;
+        if (typeof data.seq === "number") lastDraftSequenceRef.current.set(data.userId, { sessionId, seq: data.seq });
         onDraftChangeRef.current?.(data.text ?? null);
       })
       .on("broadcast", { event: "draft-clear" }, (payload) => {
-        const data = payload.payload as { userId: string; seq?: number } | null;
+        const data = payload.payload as { userId: string; seq?: number; sessionId?: string } | null;
         if (!data || data.userId === meId) return;
-        const previousSeq = lastDraftSequenceRef.current.get(data.userId) ?? -1;
-        if (typeof data.seq === "number" && data.seq <= previousSeq) return;
-        if (typeof data.seq === "number") lastDraftSequenceRef.current.set(data.userId, data.seq);
+        const sessionId = data.sessionId ?? "legacy";
+        const previous = lastDraftSequenceRef.current.get(data.userId);
+        if (previous?.sessionId === sessionId && typeof data.seq === "number" && data.seq <= previous.seq) return;
+        if (typeof data.seq === "number") lastDraftSequenceRef.current.set(data.userId, { sessionId, seq: data.seq });
         onDraftChangeRef.current?.(null);
       })
       .on("broadcast", { event: "typing" }, (payload) => {
@@ -294,7 +297,11 @@ export function Composer({
         draftChannelRef.current.send({
           type: "broadcast",
           event: "draft-clear",
-          payload: { userId: meId },
+          payload: {
+            userId: meId,
+            seq: ++draftSequenceRef.current,
+            sessionId: draftSessionIdRef.current,
+          },
         }).catch(() => {});
         supabase.removeChannel(draftChannelRef.current);
         draftChannelRef.current = null;
@@ -380,8 +387,8 @@ export function Composer({
         type: "broadcast",
         event: hasText ? "draft" : "draft-clear",
         payload: hasText
-          ? { userId: meId, text: currentText, seq }
-          : { userId: meId, seq },
+          ? { userId: meId, text: currentText, seq, sessionId: draftSessionIdRef.current }
+          : { userId: meId, seq, sessionId: draftSessionIdRef.current },
       }).catch(() => {});
     },
     [draftPreviewEnabled, meId],
@@ -405,7 +412,7 @@ export function Composer({
       .send({
         type: "broadcast",
         event: "draft-clear",
-        payload: { userId: meId, seq },
+        payload: { userId: meId, seq, sessionId: draftSessionIdRef.current },
       })
       .catch(() => {});
   }, [meId]);
