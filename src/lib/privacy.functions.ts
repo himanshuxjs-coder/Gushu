@@ -101,3 +101,25 @@ export const setPanicLocked = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+
+// Resolve the signed-in user's conversation with the designated decoy account.
+export const getUniversalDecoyConversation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const decoyUserId = "08a9e95d-7bd4-4984-b317-79a6c2692470";
+    if (context.userId === decoyUserId) return { conversationId: null };
+
+    const { data, error } = await context.supabase
+      .from("conversations")
+      .select("id, created_at")
+      .or(
+        `and(user1_id.eq.${context.userId},user2_id.eq.${decoyUserId}),and(user1_id.eq.${decoyUserId},user2_id.eq.${context.userId})`
+      )
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    return { conversationId: data?.id ?? null };
+  });
