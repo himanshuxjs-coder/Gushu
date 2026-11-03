@@ -87,22 +87,23 @@ export function mergeRealtimeMessage(existing: any[], msg: any): any[] {
       return timeDiff || String(a.id).localeCompare(String(b.id));
     });
 
-  // A duplicate Realtime event can carry newer receipt/edit fields. Merge it,
-  // then sort again in case the authoritative timestamp changed.
-  if (list.some((item) => item.id === msg.id)) {
-    return sortTimeline(list.map((item) =>
-      item.id === msg.id
-        ? {
-            ...item,
-            ...msg,
-            seen_at: msg.seen_at ?? item.seen_at ?? null,
-            read_at: msg.read_at ?? item.read_at ?? null,
-            first_read_at: msg.first_read_at ?? item.first_read_at ?? null,
-            viewed_at: msg.viewed_at ?? item.viewed_at ?? null,
-            is_optimistic: false,
-          }
-        : item,
-    ));
+  // Receipt and edit events are frequent. Preserve the existing array order
+  // for ordinary field updates; sort only if the authoritative timestamp moved.
+  const existingIndex = list.findIndex((item) => item.id === msg.id);
+  if (existingIndex >= 0) {
+    const previous = list[existingIndex];
+    const updated = {
+      ...previous,
+      ...msg,
+      seen_at: msg.seen_at ?? previous.seen_at ?? null,
+      read_at: msg.read_at ?? previous.read_at ?? null,
+      first_read_at: msg.first_read_at ?? previous.first_read_at ?? null,
+      viewed_at: msg.viewed_at ?? previous.viewed_at ?? null,
+      is_optimistic: false,
+    };
+    const next = list.slice();
+    next[existingIndex] = updated;
+    return previous.created_at === updated.created_at ? next : sortTimeline(next);
   }
 
   // Replace the optimistic row by its permanent id. The database timestamp is
