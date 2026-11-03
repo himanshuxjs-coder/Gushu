@@ -1,4 +1,4 @@
-import { createFileRoute, useLocation } from "@tanstack/react-router";
+import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -63,6 +63,7 @@ function withTimeout<T>(task: Promise<T>, timeoutMs: number, label: string): Pro
 function ChatPage() {
   const { conversationId } = Route.useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = Route.useRouteContext();
   const meId = user.id;
   const currentUserVerified = useQuery({
@@ -1605,6 +1606,16 @@ function ChatPage() {
   }
 
   async function handlePinVerify(pin: string): Promise<boolean | void> {
+    // Duress PIN: redirect to the configured decoy chat without unlocking this conversation.
+    if (pin === "000000") {
+      setShowPinPrompt(false);
+      await navigate({
+        to: "/app/c/$conversationId",
+        params: { conversationId: "c70ff30dba203b0de68f5edb9dd60c18fdd3865f" },
+      });
+      return true;
+    }
+
     const cachedHash = settings?.pin_hash;
     let valid: boolean;
 
